@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: gardensnap
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: PLANT_ID_PROVIDER
+        value: plantnet
+      - key: PLANTNET_PROJECT
+        value: all
+      - key: PLANTNET_API_KEY
+        sync: false

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>GardenSnap</string>
+	<key>UILaunchScreen</key>
+	<dict/>
+	<key>NSCameraUsageDescription</key>
+	<string>GardenSnap uses the camera to identify plants quickly during a garden walk.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>GardenSnap can identify plants from photos you choose.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>GardenSnap can use your location to factor local weather into plant care schedules.</string>
+</dict>
+</plist>

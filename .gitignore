@@ -1,0 +1,25 @@
+# macOS / Windows
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# Logs and local runtime output
+*.log
+prototype-server*.log
+
+# Dependencies
+node_modules/
+
+# Local app/build outputs
+.build/
+DerivedData/
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+
+# Local screenshots and generated previews
+prototype-screenshot.png
+
+# Environment files
+.env
+.env.*

@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>GardenSnap Prototype</title>
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="scan-panel" aria-label="Plant scanner">
+        <div class="camera-stage" id="camera-stage">
+          <video id="camera" autoplay playsinline muted></video>
+          <canvas id="snapshot" hidden></canvas>
+          <img id="captured-preview" alt="Captured plant preview" hidden>
+          <div class="scan-guide" id="scan-guide" aria-hidden="true">
+            <div class="focus-box">
+              <span>Frame one plant</span>
+            </div>
+          </div>
+          <div class="detection-box" id="detection-box" hidden>
+            <span id="detection-label">Plant</span>
+          </div>
+          <div class="camera-empty" id="camera-empty">
+            <span class="empty-icon">+</span>
+            <button class="camera-ready-button" id="camera-ready" type="button">Ready</button>
+            <span id="camera-status">Camera feed starts here</span>
+          </div>
+          <div class="feed-status" id="feed-status" hidden>Waiting for camera</div>
+        </div>
+
+        <div class="scan-actions">
+          <button class="primary-button" id="start-camera" type="button">Camera feed on</button>
+          <button class="secondary-button" id="capture" type="button" disabled>Scan</button>
+          <button class="ghost-button" id="demo-scan" type="button">Demo test</button>
+        </div>
+
+        <div class="scan-result" id="scan-result" hidden>
+          <div>
+            <p class="eyebrow">Likely match</p>
+            <h1 id="match-name">Hosta</h1>
+            <p id="match-detail">91% confidence</p>
+            <p class="match-warning" id="match-warning" hidden>Demo ID only. Connect a real plant ID provider for accurate results.</p>
+          </div>
+          <button class="primary-button" id="review-add" type="button">Add plant</button>
+        </div>
+      </section>
+
+      <section class="workspace" aria-label="Garden workspace">
+        <header class="top-bar">
+          <div>
+            <p class="eyebrow">Today</p>
+            <h2 id="garden-summary">Garden walk</h2>
+          </div>
+          <div class="top-actions">
+            <button class="ghost-button compact-button" id="quick-add" type="button">Quick add</button>
+            <div class="weather-pill" id="weather-pill">Weather loading</div>
+          </div>
+        </header>
+
+        <section class="review-panel" id="review-panel" hidden>
+          <div>
+            <p class="eyebrow">New plant</p>
+            <h2 id="review-species">Hosta</h2>
+          </div>
+
+          <label id="quick-species-field" hidden>
+            Species
+            <select id="quick-species"></select>
+          </label>
+
+          <label>
+            Name
+            <input id="plant-name" type="text" autocomplete="off">
+          </label>
+
+          <div class="field-grid">
+            <label>
+              Setting
+              <select id="plant-setting">
+                <option value="gardenBed">Garden bed</option>
+                <option value="raisedBed">Raised bed</option>
+                <option value="container">Container</option>
+                <option value="indoor">Indoor</option>
+              </select>
+            </label>
+
+            <label>
+              Sun
+              <select id="plant-sun">
+                <option value="fullSun">Full sun</option>
+                <option value="partSun" selected>Part sun</option>
+                <option value="shade">Shade</option>
+              </select>
+            </label>
+          </div>
+
+          <label>
+            Garden spot
+            <input id="plant-location" type="text" autocomplete="off" placeholder="Back fence, left bed">
+          </label>
+
+          <div class="issue-strip" id="issue-strip"></div>
+
+          <div class="scan-actions">
+            <button class="primary-button" id="save-plant" type="button">Save</button>
+            <button class="ghost-button" id="cancel-review" type="button">Cancel</button>
+          </div>
+        </section>
+
+        <section class="plant-list" id="plant-list" aria-label="Saved plants"></section>
+      </section>
+    </main>
+
+    <template id="plant-card-template">
+      <article class="plant-card">
+        <div class="plant-card-header">
+          <div>
+            <p class="eyebrow plant-species"></p>
+            <h3 class="plant-title"></h3>
+          </div>
+          <span class="status-pill"></span>
+        </div>
+
+        <p class="next-action"></p>
+        <p class="next-detail"></p>
+        <p class="care-context"></p>
+
+        <div class="care-buttons">
+          <button type="button" data-action="water">Watered</button>
+          <button type="button" data-action="fertilize">Fertilized</button>
+          <button type="button" data-action="prune">Pruned</button>
+          <button type="button" data-action="inspect">Checked</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
