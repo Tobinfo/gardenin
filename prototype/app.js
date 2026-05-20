@@ -15,7 +15,6 @@ const cameraStatus = document.querySelector("#camera-status");
 const feedStatus = document.querySelector("#feed-status");
 const startCameraButton = document.querySelector("#start-camera");
 const captureButton = document.querySelector("#capture");
-const demoScanButton = document.querySelector("#demo-scan");
 const scanResult = document.querySelector("#scan-result");
 const providerStatus = document.querySelector("#provider-status");
 const matchEyebrow = document.querySelector("#match-eyebrow");
@@ -156,10 +155,6 @@ cameraReadyButton.addEventListener("click", startCamera);
 startCameraButton.addEventListener("click", toggleCamera);
 camera.addEventListener("click", () => camera.play().catch(() => {}));
 captureButton.addEventListener("click", captureAndIdentify);
-demoScanButton.addEventListener("click", () => identifyFromImage({
-  demoIndex: Math.floor(Math.random() * profiles.length),
-  focusBox
-}));
 reviewAddButton.addEventListener("click", openReview);
 retryScanButton.addEventListener("click", retryScan);
 manualFromScanButton.addEventListener("click", openManualFromScan);
@@ -566,9 +561,7 @@ function normalizeCandidate(candidate) {
 
 function setIdentifying(isIdentifying) {
   captureButton.disabled = isIdentifying || (!stream && !isFrozenAfterScan) || (!camera.videoWidth && !isFrozenAfterScan);
-  demoScanButton.disabled = isIdentifying;
   captureButton.textContent = isIdentifying ? "Scanning" : isFrozenAfterScan ? "Retake" : "Scan";
-  demoScanButton.textContent = isIdentifying ? "Scanning" : "Demo test";
 }
 
 async function renderProviderStatus() {
