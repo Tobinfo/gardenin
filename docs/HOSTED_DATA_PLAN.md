@@ -17,6 +17,7 @@ Suggested tables:
 - `care_logs`: water, fertilize, prune, inspect, observe, and linked observation photo.
 - `weather_snapshots`: ZIP, source, current conditions, forecast summary used for a recommendation.
 - `recognition_events`: scan time, local/provider used, match score, accepted/rejected outcome.
+- `id_only_gallery`: optional saved ID-only crop photos, confirmed ID, manual ZIP/place note, and provider metadata. These are not garden plants.
 
 ## Storage Rules
 
@@ -26,6 +27,7 @@ Suggested tables:
 - Keep per-user export.
 - Treat manual labels as high-value training labels.
 - On account deletion, delete user records and image objects.
+- ID-only ZIP/place note must be manual input only unless the user explicitly opts into a future location lookup. No dropdown or geocoding API is required for the first version.
 
 ## Recognition Order
 

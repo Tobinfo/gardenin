@@ -124,6 +124,18 @@ Decision: In walking mode, flash-only capture is only for plants already in the 
 
 Reason: The user needs feedback that a photo was captured, but first-time IDs need deliberate confirmation. Known plants can be logged more fluidly because the app is matching against the user's existing garden.
 
+## 2026-05-20: ID-Only Non-Garden Plants
+
+Decision: Plants outside the user's garden should use a separate ID-only flow. The app captures three plant-box photos, scores the crops locally, sends only the best crop to the ID provider, and does not add the plant to garden care tracking.
+
+Reason: Users may want to identify wild, public, neighbor, nursery, or house plants without creating a garden record. Separating this path keeps the main garden list clean and avoids unnecessary tracking.
+
+Implementation note: The first best-photo score uses sharpness, usable brightness, contrast, and plant-like color/texture. Optional ZIP and place note are manual fields only and do not call a location API.
+
+Decision: After ID-only identification, the user can optionally save the best crop to a personal ID gallery.
+
+Reason: This gives the user a useful reference without pretending the plant is part of their maintained garden.
+
 ## 2026-05-20: Probe Direction
 
 Decision: Favor no-subscription water probe options first: Wi-Fi gateway probes, Bluetooth plant sensors, and later a simple custom endpoint for ESP32-style DIY probes.

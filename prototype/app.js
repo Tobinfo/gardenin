@@ -15,6 +15,8 @@ const cameraStatus = document.querySelector("#camera-status");
 const feedStatus = document.querySelector("#feed-status");
 const startCameraButton = document.querySelector("#start-camera");
 const captureButton = document.querySelector("#capture");
+const idOnlyStartButton = document.querySelector("#id-only-start");
+const idOnlyGalleryOpenButton = document.querySelector("#id-only-gallery-open");
 const scanResult = document.querySelector("#scan-result");
 const providerStatus = document.querySelector("#provider-status");
 const recognitionDebugSummary = document.querySelector("#recognition-debug-summary");
@@ -25,6 +27,7 @@ const matchWarning = document.querySelector("#match-warning");
 const matchAlternatives = document.querySelector("#match-alternatives");
 const matchOptions = document.querySelector("#match-options");
 const reviewAddButton = document.querySelector("#review-add");
+const idOnlySavePhotoButton = document.querySelector("#id-only-save-photo");
 const retryScanButton = document.querySelector("#retry-scan");
 const manualFromScanButton = document.querySelector("#manual-from-scan");
 const morePhotosFromScanButton = document.querySelector("#more-photos-from-scan");
@@ -67,12 +70,23 @@ const morePhotosPlantInput = document.querySelector("#more-photos-plant");
 const morePhotosCount = document.querySelector("#more-photos-count");
 const morePhotosTakeButton = document.querySelector("#more-photos-take");
 const morePhotosDoneButton = document.querySelector("#more-photos-done");
+const idOnlyCaptureDialog = document.querySelector("#id-only-capture");
+const idOnlyProgress = document.querySelector("#id-only-progress");
+const idOnlyQuality = document.querySelector("#id-only-quality");
+const idOnlyZipInput = document.querySelector("#id-only-zip");
+const idOnlyPlaceInput = document.querySelector("#id-only-place");
+const idOnlyTakeButton = document.querySelector("#id-only-take");
+const idOnlyCancelButton = document.querySelector("#id-only-cancel");
+const idOnlyGalleryDialog = document.querySelector("#id-only-gallery");
+const idOnlyGalleryCloseButton = document.querySelector("#id-only-gallery-close");
+const idOnlyGalleryGrid = document.querySelector("#id-only-gallery-grid");
 const photoLibraryDialog = document.querySelector("#photo-library");
 const photoLibraryTitle = document.querySelector("#photo-library-title");
 const photoLibraryCloseButton = document.querySelector("#photo-library-close");
 const photoGrid = document.querySelector("#photo-grid");
 
 const storageKey = "gardensnap.prototype.plants";
+const idOnlyGalleryKey = "gardenin.prototype.idOnlyGallery";
 const photoConsentKey = "gardenin.photoTrainingConsent";
 const legacyPhotoConsentKey = "floraos.photoTrainingConsent";
 const weatherZipKey = "gardenin.weather.zip";
@@ -91,8 +105,14 @@ let pendingKnownPlantId = null;
 let pendingMorePhotosCount = 0;
 let pendingProviderFallbackPayload = null;
 let activePhotoLibraryPlantId = null;
+let idOnlyCaptures = [];
+let isIdOnlyResult = false;
+let activeIdOnlyGalleryCandidate = null;
+let activeIdOnlyQuality = null;
+let activeIdOnlyLocation = { zip: "", placeNote: "" };
 const photoFeatureCache = new Map();
 const focusBox = { x: 0.18, y: 0.12, width: 0.64, height: 0.72 };
+let idOnlyGallery = loadIdOnlyGallery();
 const strongConfidence = 0.55;
 const weakConfidence = 0.25;
 const noReliableConfidence = 0.05;
@@ -179,7 +199,10 @@ cameraReadyButton.addEventListener("click", startCamera);
 startCameraButton.addEventListener("click", toggleCamera);
 camera.addEventListener("click", () => camera.play().catch(() => {}));
 captureButton.addEventListener("click", captureAndIdentify);
+idOnlyStartButton.addEventListener("click", openIdOnlyCapture);
+idOnlyGalleryOpenButton.addEventListener("click", openIdOnlyGallery);
 reviewAddButton.addEventListener("click", openReview);
+idOnlySavePhotoButton.addEventListener("click", saveActiveIdOnlyPhoto);
 retryScanButton.addEventListener("click", retryScan);
 manualFromScanButton.addEventListener("click", openManualFromScan);
 morePhotosFromScanButton.addEventListener("click", openMorePhotosFromScan);
@@ -198,10 +221,18 @@ trainingCaptureButton.addEventListener("click", captureTrainingPhoto);
 trainingCaptureStopButton.addEventListener("click", closeTrainingCapture);
 morePhotosTakeButton.addEventListener("click", captureMoreRecognitionPhoto);
 morePhotosDoneButton.addEventListener("click", closeMorePhotosRequest);
+idOnlyTakeButton.addEventListener("click", captureIdOnlyPhoto);
+idOnlyCancelButton.addEventListener("click", closeIdOnlyCapture);
+idOnlyGalleryCloseButton.addEventListener("click", closeIdOnlyGallery);
 photoLibraryCloseButton.addEventListener("click", closePhotoLibrary);
 photoLibraryDialog.addEventListener("click", (event) => {
   if (event.target === photoLibraryDialog) {
     closePhotoLibrary();
+  }
+});
+idOnlyGalleryDialog.addEventListener("click", (event) => {
+  if (event.target === idOnlyGalleryDialog) {
+    closeIdOnlyGallery();
   }
 });
 
@@ -379,6 +410,10 @@ function getImageSignature(context, width, height) {
 }
 
 function cropDataUrl(sourceCanvas, box) {
+  return cropCanvasFor(sourceCanvas, box).toDataURL("image/jpeg", 0.86);
+}
+
+function cropCanvasFor(sourceCanvas, box) {
   const crop = document.createElement("canvas");
   crop.width = Math.max(1, Math.round(sourceCanvas.width * box.width));
   crop.height = Math.max(1, Math.round(sourceCanvas.height * box.height));
@@ -394,14 +429,14 @@ function cropDataUrl(sourceCanvas, box) {
     crop.width,
     crop.height
   );
-  return crop.toDataURL("image/jpeg", 0.86);
+  return crop;
 }
 
 async function identifyFromImage(payload, options = {}) {
   setIdentifying(true);
 
   try {
-    if (!options.skipLocalRepository) {
+    if (!options.skipLocalRepository && !options.idOnly) {
       renderRecognitionDebug("Checking gardenin photos first.");
       const localMatch = await localPlantMatchFor(payload);
       if (localMatch) {
@@ -415,7 +450,9 @@ async function identifyFromImage(payload, options = {}) {
     }
 
     pendingProviderFallbackPayload = null;
-    renderRecognitionDebug("Using Pl@ntNet because no confident local photo match was found.");
+    renderRecognitionDebug(options.idOnly
+      ? "ID only: sending the best of 3 photos to Pl@ntNet. This will not add garden tracking."
+      : "Using Pl@ntNet because no confident local photo match was found.");
     const response = await fetch("/api/identify", {
       method: "POST",
       headers: {
@@ -430,7 +467,11 @@ async function identifyFromImage(payload, options = {}) {
       throw new Error(result.error || "No plant match found.");
     }
 
-    showCandidates(result.candidates, payload);
+    if (options.idOnly) {
+      showIdOnlyCandidates(result.candidates, payload);
+    } else {
+      showCandidates(result.candidates, payload);
+    }
   } catch (error) {
     if (Number.isInteger(payload.demoIndex)) {
       showCandidates([demoCandidateFor(payload)], payload);
@@ -445,11 +486,13 @@ async function identifyFromImage(payload, options = {}) {
       matchDetail.textContent = error.message;
       matchWarning.hidden = true;
       matchAlternatives.hidden = true;
+      reviewAddButton.hidden = Boolean(options.idOnly);
       reviewAddButton.disabled = true;
       reviewAddButton.textContent = "Add plant";
+      idOnlySavePhotoButton.hidden = true;
       retryScanButton.hidden = false;
-      manualFromScanButton.hidden = !lastScanCropDataUrl;
-      morePhotosFromScanButton.hidden = !lastScanCropDataUrl || plants.length === 0;
+      manualFromScanButton.hidden = Boolean(options.idOnly) || !lastScanCropDataUrl;
+      morePhotosFromScanButton.hidden = Boolean(options.idOnly) || !lastScanCropDataUrl || plants.length === 0;
     }
   } finally {
     setIdentifying(false);
@@ -457,6 +500,9 @@ async function identifyFromImage(payload, options = {}) {
 }
 
 function showCandidates(candidates, payload) {
+  isIdOnlyResult = false;
+  activeIdOnlyGalleryCandidate = null;
+  idOnlySavePhotoButton.hidden = true;
   const trainingSample = payload?.imageDataUrl ? {
     id: makeId("photo"),
     cropImageDataUrl: payload.imageDataUrl,
@@ -484,6 +530,61 @@ function showCandidates(candidates, payload) {
   }
 }
 
+function showIdOnlyCandidates(candidates, payload) {
+  isIdOnlyResult = true;
+  activeIdOnlyQuality = payload.quality || null;
+  activeCandidates = candidates.map(normalizeCandidate);
+  selectIdOnlyCandidate(0);
+  scanResult.hidden = false;
+  freezeFeedForReview();
+}
+
+function selectIdOnlyCandidate(index) {
+  activeCandidate = activeCandidates[index];
+  const isNoReliableMatch = isNoReliableCandidate(activeCandidate);
+  showCameraOverlay(false);
+  knownPlantPopover.hidden = true;
+  renderDetectionBox(activeCandidate);
+  scanGuide.hidden = Boolean(activeCandidate.observationBox);
+  matchEyebrow.textContent = isNoReliableMatch ? "ID only - no reliable match" : "ID only";
+  matchName.textContent = isNoReliableMatch ? "No reliable plant match" : activeCandidate.profile.commonName;
+  matchDetail.textContent = `${confidencePercent(activeCandidate)} confidence from ${activeCandidate.metadata.providerName}`;
+  matchWarning.textContent = idOnlyWarning({ quality: activeIdOnlyQuality });
+  matchWarning.hidden = false;
+  activeIdOnlyGalleryCandidate = isNoReliableMatch ? null : {
+    imageDataUrl: lastScanCropDataUrl,
+    capturedAt: new Date().toISOString(),
+    cropBox: focusBox,
+    fullFrameStored: false,
+    species: activeCandidate.profile.commonName,
+    scientificName: activeCandidate.profile.scientificName,
+    providerName: activeCandidate.metadata.providerName,
+    providerPlantID: activeCandidate.metadata.providerPlantID || null,
+    confidence: activeCandidate.confidence,
+    quality: activeIdOnlyQuality,
+    seenLocation: activeIdOnlyLocation
+  };
+  reviewAddButton.hidden = false;
+  reviewAddButton.disabled = isNoReliableMatch;
+  reviewAddButton.textContent = "Confirm ID";
+  idOnlySavePhotoButton.hidden = isNoReliableMatch;
+  idOnlySavePhotoButton.disabled = isNoReliableMatch;
+  idOnlySavePhotoButton.textContent = "Save best photo";
+  retryScanButton.hidden = false;
+  retryScanButton.textContent = "Done";
+  manualFromScanButton.hidden = true;
+  morePhotosFromScanButton.hidden = true;
+  renderCandidateOptions(index);
+}
+
+function idOnlyWarning(payload) {
+  const quality = payload?.quality;
+  const qualityText = quality
+    ? `Best of 3: ${Math.round(quality.score * 100)}% quality (${quality.reason}).`
+    : "Best of 3 photos was sent.";
+  return `ID only. This plant is not added to your garden and no care tracking is created. ${qualityText}`;
+}
+
 function selectCandidate(index) {
   activeCandidate = activeCandidates[index];
   const isNoReliableMatch = isNoReliableCandidate(activeCandidate);
@@ -501,6 +602,7 @@ function selectCandidate(index) {
   reviewAddButton.textContent = activeCandidate.confidence < weakConfidence && activeCandidate.metadata.source !== "quick-add" && !isNoReliableMatch
     ? "Use anyway"
     : "Add plant";
+  idOnlySavePhotoButton.hidden = true;
   retryScanButton.hidden = !isNoReliableMatch;
   manualFromScanButton.hidden = !isNoReliableMatch || !lastScanCropDataUrl;
   morePhotosFromScanButton.hidden = !isNoReliableMatch || !lastScanCropDataUrl || plants.length === 0;
@@ -877,7 +979,318 @@ function cameraErrorMessage(error) {
   return "Camera unavailable. Retry or use demo scan.";
 }
 
+function openIdOnlyCapture() {
+  idOnlyCaptures = [];
+  isIdOnlyResult = false;
+  activeIdOnlyGalleryCandidate = null;
+  activeIdOnlyLocation = { zip: "", placeNote: "" };
+  idOnlySavePhotoButton.hidden = true;
+  closeReview();
+  scanResult.hidden = true;
+  knownPlantPopover.hidden = true;
+  detectionBox.hidden = true;
+  idOnlyCaptureDialog.hidden = false;
+  renderRecognitionDebug("ID only: take 3 photos. gardenin will send the best one to Pl@ntNet.");
+  updateIdOnlyProgress();
+
+  if (!stream) {
+    startCamera();
+  }
+}
+
+async function captureIdOnlyPhoto() {
+  if (!stream || !camera.videoWidth) {
+    await startCamera();
+    return;
+  }
+
+  snapshot.width = camera.videoWidth;
+  snapshot.height = camera.videoHeight;
+  const context = snapshot.getContext("2d");
+  context.drawImage(camera, 0, 0, snapshot.width, snapshot.height);
+  const cropCanvas = cropCanvasFor(snapshot, focusBox);
+  const capture = {
+    imageDataUrl: cropCanvas.toDataURL("image/jpeg", 0.86),
+    previewDataUrl: snapshot.toDataURL("image/jpeg", 0.82),
+    capturedAt: new Date().toISOString(),
+    cropBox: focusBox,
+    fullFrameStored: false,
+    quality: scoreCropQuality(cropCanvas)
+  };
+
+  idOnlyCaptures.push(capture);
+  flashCameraStage();
+  updateIdOnlyProgress();
+
+  if (idOnlyCaptures.length >= 3) {
+    await identifyBestIdOnlyCapture();
+  }
+}
+
+async function identifyBestIdOnlyCapture() {
+  const bestCapture = bestIdOnlyCapture();
+  if (!bestCapture) {
+    return;
+  }
+
+  activeIdOnlyLocation = idOnlyLocationFromInputs();
+  idOnlyCaptureDialog.hidden = true;
+  lastScanImageDataUrl = bestCapture.previewDataUrl;
+  lastScanCropDataUrl = bestCapture.imageDataUrl;
+  renderRecognitionDebug(`ID only: selected photo ${bestCapture.number} of 3 at ${Math.round(bestCapture.quality.score * 100)}% quality.`);
+  await identifyFromImage({
+    imageDataUrl: bestCapture.imageDataUrl,
+    imageSignature: Math.round(bestCapture.quality.score * 1000),
+    focusBox,
+    quality: bestCapture.quality,
+    seenLocation: activeIdOnlyLocation
+  }, {
+    skipLocalRepository: true,
+    idOnly: true
+  });
+}
+
+function idOnlyLocationFromInputs() {
+  const zip = idOnlyZipInput.value.trim();
+  return {
+    zip: /^\d{5}$/.test(zip) ? zip : "",
+    placeNote: idOnlyPlaceInput.value.trim()
+  };
+}
+
+function bestIdOnlyCapture() {
+  return idOnlyCaptures
+    .map((capture, index) => ({
+      ...capture,
+      number: index + 1
+    }))
+    .sort((left, right) => right.quality.score - left.quality.score)[0] || null;
+}
+
+function updateIdOnlyProgress() {
+  for (let index = 0; index < 3; index += 1) {
+    const item = idOnlyProgress.querySelector(`[data-step="id-photo-${index + 1}"]`);
+    if (!item) {
+      continue;
+    }
+
+    const capture = idOnlyCaptures[index];
+    item.classList.toggle("is-complete", Boolean(capture));
+    item.querySelector("strong").textContent = capture
+      ? `${Math.round(capture.quality.score * 100)}%`
+      : "Needed";
+  }
+
+  const next = Math.min(idOnlyCaptures.length + 1, 3);
+  idOnlyTakeButton.textContent = idOnlyCaptures.length >= 3 ? "Identifying" : `Take photo ${next}`;
+  idOnlyTakeButton.disabled = idOnlyCaptures.length >= 3;
+  const bestCapture = bestIdOnlyCapture();
+  idOnlyQuality.textContent = bestCapture
+    ? `Best photo: ${bestCapture.number} of 3, ${Math.round(bestCapture.quality.score * 100)}% quality (${bestCapture.quality.reason}).`
+    : "Best photo: waiting.";
+}
+
+function closeIdOnlyCapture() {
+  idOnlyCaptureDialog.hidden = true;
+  idOnlyCaptures = [];
+  idOnlyTakeButton.disabled = false;
+  updateIdOnlyProgress();
+}
+
+function confirmIdOnlyResult() {
+  renderRecognitionDebug(`ID only confirmed: ${activeCandidate.profile.commonName}. It was not added to the garden and no care tracking was created.`);
+  scanResult.hidden = true;
+  detectionBox.hidden = true;
+  isIdOnlyResult = false;
+  activeCandidate = null;
+  activeCandidates = [];
+  activeIdOnlyGalleryCandidate = null;
+  idOnlySavePhotoButton.hidden = true;
+  reviewAddButton.textContent = "Add plant";
+  retryScanButton.textContent = "Try again";
+  startCamera();
+}
+
+function saveActiveIdOnlyPhoto() {
+  if (!activeIdOnlyGalleryCandidate) {
+    return;
+  }
+
+  const savedPhoto = {
+    id: makeId("id-only"),
+    ...activeIdOnlyGalleryCandidate,
+    savedAt: new Date().toISOString()
+  };
+  idOnlyGallery.unshift(savedPhoto);
+  idOnlyGallery = idOnlyGallery.slice(0, 100);
+  saveIdOnlyGallery();
+  idOnlySavePhotoButton.textContent = "Saved";
+  idOnlySavePhotoButton.disabled = true;
+  renderRecognitionDebug(`Saved ${savedPhoto.species} to the personal ID gallery. It was not added to garden tracking.`);
+}
+
+function openIdOnlyGallery() {
+  renderIdOnlyGallery();
+  idOnlyGalleryDialog.hidden = false;
+}
+
+function closeIdOnlyGallery() {
+  idOnlyGalleryDialog.hidden = true;
+  idOnlyGalleryGrid.replaceChildren();
+}
+
+function renderIdOnlyGallery() {
+  if (idOnlyGallery.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "photo-empty";
+    empty.textContent = "No ID-only photos saved yet.";
+    idOnlyGalleryGrid.replaceChildren(empty);
+    return;
+  }
+
+  idOnlyGalleryGrid.replaceChildren(...idOnlyGallery.map(idOnlyGalleryTileFor));
+}
+
+function idOnlyGalleryTileFor(photo) {
+  const tile = document.createElement("article");
+  tile.className = "photo-tile";
+
+  const image = document.createElement("img");
+  image.src = photo.imageDataUrl;
+  image.alt = photo.species || "ID-only plant photo";
+  image.loading = "lazy";
+
+  const label = document.createElement("strong");
+  label.textContent = photo.species || "Unknown plant";
+
+  const meta = document.createElement("span");
+  const confidence = Number.isFinite(photo.confidence)
+    ? `${Math.round(photo.confidence * 100)}%`
+    : "unknown";
+  const location = [photo.seenLocation?.zip, photo.seenLocation?.placeNote]
+    .filter(Boolean)
+    .join(", ");
+  meta.textContent = `${formatPhotoDate(photo.savedAt || photo.capturedAt)} - ${confidence} from ${photo.providerName || "provider"}${location ? ` - ${location}` : ""}`;
+
+  const actions = document.createElement("div");
+  actions.className = "photo-actions";
+
+  const exportButton = document.createElement("button");
+  exportButton.type = "button";
+  exportButton.textContent = "Export";
+  exportButton.addEventListener("click", () => exportIdOnlyPhoto(photo));
+
+  const deleteButton = document.createElement("button");
+  deleteButton.type = "button";
+  deleteButton.textContent = "Delete";
+  deleteButton.addEventListener("click", () => deleteIdOnlyPhoto(photo.id));
+
+  actions.append(exportButton, deleteButton);
+  tile.append(image, label, meta, actions);
+  return tile;
+}
+
+function exportIdOnlyPhoto(photo) {
+  const link = document.createElement("a");
+  link.href = photo.imageDataUrl;
+  link.download = `${slugForFile(photo.species || "id-only")}-${photo.id || "photo"}.jpg`;
+  document.body.append(link);
+  link.click();
+  link.remove();
+}
+
+function deleteIdOnlyPhoto(photoId) {
+  const shouldDelete = window.confirm("Delete this ID-only gallery photo?");
+  if (!shouldDelete) {
+    return;
+  }
+
+  idOnlyGallery = idOnlyGallery.filter((photo) => photo.id !== photoId);
+  saveIdOnlyGallery();
+  renderIdOnlyGallery();
+}
+
+function scoreCropQuality(cropCanvas) {
+  const context = cropCanvas.getContext("2d", { willReadFrequently: true });
+  const imageData = context.getImageData(0, 0, cropCanvas.width, cropCanvas.height).data;
+  let totalLight = 0;
+  let totalSaturation = 0;
+  let totalGreenBias = 0;
+  let totalEdge = 0;
+  let lightSquares = 0;
+  let edgeCount = 0;
+  const pixelCount = Math.max(1, cropCanvas.width * cropCanvas.height);
+
+  for (let y = 0; y < cropCanvas.height; y += 1) {
+    for (let x = 0; x < cropCanvas.width; x += 1) {
+      const index = (y * cropCanvas.width + x) * 4;
+      const red = imageData[index] / 255;
+      const green = imageData[index + 1] / 255;
+      const blue = imageData[index + 2] / 255;
+      const max = Math.max(red, green, blue);
+      const min = Math.min(red, green, blue);
+      const light = 0.299 * red + 0.587 * green + 0.114 * blue;
+
+      totalLight += light;
+      lightSquares += light * light;
+      totalSaturation += max - min;
+      totalGreenBias += Math.max(0, green - Math.max(red, blue));
+
+      if (x > 0) {
+        const leftIndex = index - 4;
+        const leftLight = (
+          0.299 * imageData[leftIndex] +
+          0.587 * imageData[leftIndex + 1] +
+          0.114 * imageData[leftIndex + 2]
+        ) / 255;
+        totalEdge += Math.abs(light - leftLight);
+        edgeCount += 1;
+      }
+
+      if (y > 0) {
+        const upperIndex = index - cropCanvas.width * 4;
+        const upperLight = (
+          0.299 * imageData[upperIndex] +
+          0.587 * imageData[upperIndex + 1] +
+          0.114 * imageData[upperIndex + 2]
+        ) / 255;
+        totalEdge += Math.abs(light - upperLight);
+        edgeCount += 1;
+      }
+    }
+  }
+
+  const averageLight = totalLight / pixelCount;
+  const contrast = Math.sqrt(Math.max(0, lightSquares / pixelCount - averageLight * averageLight));
+  const brightnessScore = clamp(1 - Math.abs(averageLight - 0.52) / 0.52, 0, 1);
+  const sharpnessScore = clamp((edgeCount ? totalEdge / edgeCount : 0) * 8, 0, 1);
+  const contrastScore = clamp(contrast / 0.24, 0, 1);
+  const plantColorScore = clamp((totalSaturation / pixelCount) * 1.8 + (totalGreenBias / pixelCount) * 2.6, 0, 1);
+  const score = clamp(
+    sharpnessScore * 0.42 +
+    brightnessScore * 0.24 +
+    contrastScore * 0.18 +
+    plantColorScore * 0.16,
+    0,
+    1
+  );
+
+  return {
+    score,
+    sharpnessScore,
+    brightnessScore,
+    contrastScore,
+    plantColorScore,
+    reason: `sharp ${Math.round(sharpnessScore * 100)}%, light ${Math.round(brightnessScore * 100)}%, contrast ${Math.round(contrastScore * 100)}%, color ${Math.round(plantColorScore * 100)}%`
+  };
+}
+
 function openReview() {
+  if (isIdOnlyResult) {
+    confirmIdOnlyResult();
+    return;
+  }
+
   if (!activeCandidate || isNoReliableCandidate(activeCandidate)) {
     return;
   }
@@ -887,7 +1300,10 @@ function openReview() {
 }
 
 function retryScan() {
+  isIdOnlyResult = false;
+  activeIdOnlyGalleryCandidate = null;
   closeReview();
+  closeIdOnlyCapture();
   knownPlantPopover.hidden = true;
   morePhotosRequestDialog.hidden = true;
   trainingCaptureDialog.hidden = true;
@@ -896,6 +1312,10 @@ function retryScan() {
   retryScanButton.hidden = true;
   manualFromScanButton.hidden = true;
   morePhotosFromScanButton.hidden = true;
+  reviewAddButton.hidden = false;
+  reviewAddButton.textContent = "Add plant";
+  idOnlySavePhotoButton.hidden = true;
+  retryScanButton.textContent = "Try again";
   startCamera();
 }
 
@@ -1484,6 +1904,10 @@ function makeId(prefix) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 9)}`;
 }
 
+function clamp(value, min, max) {
+  return Math.min(max, Math.max(min, value));
+}
+
 function recommendationsFor(plant) {
   const water = wateringRecommendation(plant);
   const fertilize = fertilizingRecommendation(plant);
@@ -1711,7 +2135,13 @@ function renderCandidateOptions(selectedIndex) {
     button.className = "match-option";
     button.disabled = index === selectedIndex;
     button.textContent = `${candidate.profile.commonName} (${confidencePercent(candidate)})`;
-    button.addEventListener("click", () => selectCandidate(index));
+    button.addEventListener("click", () => {
+      if (isIdOnlyResult) {
+        selectIdOnlyCandidate(index);
+      } else {
+        selectCandidate(index);
+      }
+    });
     return button;
   }));
 
@@ -1873,6 +2303,40 @@ function loadPlants() {
 function savePlants() {
   plants = plants.map(sanitizePlantRecord);
   localStorage.setItem(storageKey, JSON.stringify(plants));
+}
+
+function loadIdOnlyGallery() {
+  try {
+    return (JSON.parse(localStorage.getItem(idOnlyGalleryKey)) || []).map(sanitizeIdOnlyGalleryPhoto);
+  } catch {
+    return [];
+  }
+}
+
+function saveIdOnlyGallery() {
+  idOnlyGallery = idOnlyGallery.map(sanitizeIdOnlyGalleryPhoto);
+  localStorage.setItem(idOnlyGalleryKey, JSON.stringify(idOnlyGallery));
+}
+
+function sanitizeIdOnlyGalleryPhoto(photo) {
+  return {
+    id: photo.id || makeId("id-only"),
+    imageDataUrl: photo.imageDataUrl || null,
+    capturedAt: photo.capturedAt || photo.savedAt || new Date().toISOString(),
+    savedAt: photo.savedAt || photo.capturedAt || new Date().toISOString(),
+    cropBox: photo.cropBox || focusBox,
+    fullFrameStored: false,
+    species: photo.species || "Unknown plant",
+    scientificName: photo.scientificName || null,
+    providerName: photo.providerName || null,
+    providerPlantID: photo.providerPlantID || null,
+    confidence: Number.isFinite(photo.confidence) ? photo.confidence : null,
+    quality: photo.quality || null,
+    seenLocation: {
+      zip: /^\d{5}$/.test(photo.seenLocation?.zip || "") ? photo.seenLocation.zip : "",
+      placeNote: photo.seenLocation?.placeNote || ""
+    }
+  };
 }
 
 function sanitizePlantRecord(plant) {

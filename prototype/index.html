@@ -42,6 +42,8 @@
         <div class="scan-actions">
           <button class="primary-button" id="start-camera" type="button">Camera feed on</button>
           <button class="secondary-button" id="capture" type="button" disabled>Scan</button>
+          <button class="ghost-button" id="id-only-start" type="button">ID only</button>
+          <button class="ghost-button" id="id-only-gallery-open" type="button">ID gallery</button>
           <div class="provider-status" id="provider-status">ID: checking</div>
         </div>
 
@@ -63,6 +65,7 @@
           </div>
           <div class="result-actions">
             <button class="primary-button" id="review-add" type="button">Add plant</button>
+            <button class="ghost-button" id="id-only-save-photo" type="button" hidden>Save best photo</button>
             <button class="ghost-button" id="retry-scan" type="button" hidden>Try again</button>
             <button class="ghost-button" id="manual-from-scan" type="button" hidden>I know this plant</button>
             <button class="ghost-button" id="more-photos-from-scan" type="button" hidden>More photos</button>
@@ -208,6 +211,35 @@
       </div>
     </section>
 
+    <section class="consent-dialog capture-assist" id="id-only-capture" role="dialog" aria-modal="false" aria-labelledby="id-only-title" hidden>
+      <div class="consent-panel">
+        <p class="eyebrow">ID only</p>
+        <h2 id="id-only-title">Identify a plant outside my garden</h2>
+        <p id="id-only-detail">Take 3 plant-box photos. gardenin sends the best one for ID and does not add this plant to your garden or care tracking.</p>
+        <div class="field-grid">
+          <label>
+            ZIP seen
+            <input id="id-only-zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="Optional">
+          </label>
+          <label>
+            Place note
+            <input id="id-only-place" type="text" autocomplete="off" placeholder="Optional">
+          </label>
+        </div>
+        <p class="quality-note">No location lookup is made. These fields are saved only if you save the best photo.</p>
+        <ol class="training-progress" id="id-only-progress" aria-label="ID only photo progress">
+          <li data-step="id-photo-1"><span>Photo 1</span><strong>Needed</strong></li>
+          <li data-step="id-photo-2"><span>Photo 2</span><strong>Needed</strong></li>
+          <li data-step="id-photo-3"><span>Photo 3</span><strong>Needed</strong></li>
+        </ol>
+        <p class="quality-note" id="id-only-quality">Best photo: waiting.</p>
+        <div class="scan-actions">
+          <button class="primary-button" id="id-only-take" type="button">Take photo 1</button>
+          <button class="ghost-button" id="id-only-cancel" type="button">Cancel</button>
+        </div>
+      </div>
+    </section>
+
     <template id="plant-card-template">
       <article class="plant-card">
         <div class="plant-card-header">
@@ -243,6 +275,20 @@
           <button class="ghost-button compact-button" id="photo-library-close" type="button">Close</button>
         </div>
         <div class="photo-grid" id="photo-grid"></div>
+      </div>
+    </section>
+
+    <section class="consent-dialog" id="id-only-gallery" role="dialog" aria-modal="true" aria-labelledby="id-only-gallery-title" hidden>
+      <div class="photo-library-panel">
+        <div class="photo-library-header">
+          <div>
+            <p class="eyebrow">Personal ID gallery</p>
+            <h2 id="id-only-gallery-title">ID-only photos</h2>
+          </div>
+          <button class="ghost-button compact-button" id="id-only-gallery-close" type="button">Close</button>
+        </div>
+        <p class="photo-empty">These are saved ID-only crop photos. They are not garden plants and do not create care tracking.</p>
+        <div class="photo-grid" id="id-only-gallery-grid"></div>
       </div>
     </section>
 
