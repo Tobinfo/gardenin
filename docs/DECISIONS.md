@@ -76,6 +76,18 @@ Decision: After any confirmed plant, including manual entry and high-confidence 
 
 Reason: Manual entries are often the highest-quality labels because many users already know common plants. The app should not waste that moment; it should turn confirmed knowledge into future recognition data.
 
+## 2026-05-20: First-Use Personal Photo Consent
+
+Decision: On first use, ask `Can your photos be used to help make floraos better for you?`
+
+Reason: The value should be framed honestly: the user is helping their own app recognize their plants better. The prompt should happen before durable photo storage, and training use should remain opt-in.
+
+## 2026-05-20: Store Plant Box Crops By Default
+
+Decision: Strip photos to the plant focus box from the beginning. Store the plant-box crop for recognition and training flows by default, not the full camera frame. Full frames may be used temporarily for review but should not become durable storage unless the user explicitly approves that behavior.
+
+Reason: Cropping reduces faces, rooms, homes, addresses, and unrelated background data. It is the simplest privacy-preserving default while still keeping the plant evidence the app needs.
+
 ## 2026-05-20: Walking Mode Observation Flash
 
 Decision: In walking mode, flash-only capture is only for plants already in the user's saved/previously identified group. First-time or uncertain IDs should freeze the captured frame for confirmation before saving or giving plant-specific guidance.
