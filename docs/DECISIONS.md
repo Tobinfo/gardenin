@@ -96,9 +96,11 @@ Reason: The best training data comes after confirmation. Asking for two addition
 
 ## 2026-05-20: Saved-Plant Recognition Feedback
 
-Decision: When a scan matches a species already saved in the user's garden with usable confidence, flash the camera view and ask `Plant nickname?` instead of freezing into the first-time add flow.
+Decision: When a scan matches a plant already saved in the user's garden with usable confidence, flash the camera view and ask whether to log a sighting for that saved plant instead of freezing into the first-time add flow.
 
 Reason: Previously identified plants should feel like recognition, not re-entry. Confirming the prompt logs an observation crop for that saved plant while keeping walking mode fluid.
+
+Implementation note: Garden Scan captures three plant-box crop photos. Local saved-plant recognition tests all three crops against the user's saved crop-photo repository before any provider call. Pl@ntNet still receives only the strongest crop when local recognition fails or the user rejects the saved-plant match.
 
 ## 2026-05-20: Repository-First Recognition Loop
 

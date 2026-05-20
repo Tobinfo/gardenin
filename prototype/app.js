@@ -114,6 +114,7 @@ let photoTrainingConsent = loadPhotoTrainingConsent();
 let pendingTrainingPlantId = null;
 let pendingTrainingPhotos = [];
 let pendingKnownPlantId = null;
+let pendingKnownPlantPayload = null;
 let pendingMorePhotosCount = 0;
 let pendingProviderFallbackPayload = null;
 let activePhotoLibraryPlantId = null;
@@ -478,8 +479,9 @@ async function identifyFromImage(payload, options = {}) {
       const localMatch = await localPlantMatchFor(payload);
       if (localMatch) {
         pendingProviderFallbackPayload = payload;
+        pendingKnownPlantPayload = payload;
         renderRecognitionDebug(
-          `gardenin photos recognized ${localMatch.plant.nickname} at ${confidencePercent(localMatch.candidate)} from ${localMatch.candidate.metadata.sampleCount} photo(s).`
+          `gardenin photos recognized ${localMatch.plant.nickname} at ${confidencePercent(localMatch.candidate)} from ${localMatch.candidate.metadata.sampleCount} saved photo(s), using scan photo ${localMatch.candidate.metadata.queryPhotoNumber} of ${localMatch.candidate.metadata.queryPhotoCount}.`
         );
         showKnownPlantRecognition(localMatch.plant, localMatch.candidate);
         return;
@@ -487,6 +489,7 @@ async function identifyFromImage(payload, options = {}) {
     }
 
     pendingProviderFallbackPayload = null;
+    pendingKnownPlantPayload = null;
     renderRecognitionDebug(options.idOnly
       ? "ID only: sending the best of 3 photos to Pl@ntNet. This will not add garden tracking."
       : "Using Pl@ntNet because no confident local photo match was found.");
@@ -654,8 +657,19 @@ async function localPlantMatchFor(payload) {
     return null;
   }
 
-  const queryFeature = await featureForPhoto(payload.imageDataUrl);
-  if (!queryFeature) {
+  const queryPhotos = scanPhotosFromPayload(payload);
+  const queryFeatures = [];
+  for (const photo of queryPhotos) {
+    const feature = await featureForPhoto(photo.imageDataUrl);
+    if (feature) {
+      queryFeatures.push({
+        ...photo,
+        feature
+      });
+    }
+  }
+
+  if (queryFeatures.length === 0) {
     renderRecognitionDebug("Could not read the scan crop for local matching. Using Pl@ntNet.");
     return null;
   }
@@ -689,21 +703,33 @@ async function localPlantMatchFor(payload) {
     return null;
   }
 
-  const rankings = recognition.rankPlants(queryFeature, records, {
+  const matchOptions = {
     minimumSamples: localRecognitionMinimumPhotos,
-    threshold: 0.76,
-    margin: 0.025
+    threshold: 0.68,
+    margin: 0.015,
+    topSampleCount: 4
+  };
+  const rankedAttempts = queryFeatures.map((queryPhoto) => {
+    const rankings = recognition.rankPlants(queryPhoto.feature, records, matchOptions);
+    const match = recognition.matchPlant(queryPhoto.feature, records, matchOptions);
+    return {
+      queryPhoto,
+      rankings,
+      best: rankings[0] || null,
+      match
+    };
   });
-  const best = rankings[0];
-  const match = recognition.matchPlant(queryFeature, records, {
-    minimumSamples: localRecognitionMinimumPhotos,
-    threshold: 0.76,
-    margin: 0.025
-  });
+  const matchedAttempt = rankedAttempts
+    .filter((attempt) => attempt.match)
+    .sort((left, right) => right.match.confidence - left.match.confidence)[0] || null;
+  const bestAttempt = rankedAttempts
+    .filter((attempt) => attempt.best)
+    .sort((left, right) => right.best.confidence - left.best.confidence)[0] || null;
+  const match = matchedAttempt?.match || null;
 
   if (!match) {
-    renderRecognitionDebug(best
-      ? `Best local photo match was ${best.label} at ${Math.round(best.confidence * 100)}%, below the acceptance threshold or too close to another plant. Using Pl@ntNet.`
+    renderRecognitionDebug(bestAttempt?.best
+      ? `Best local photo match was ${bestAttempt.best.label} at ${Math.round(bestAttempt.best.confidence * 100)}% from scan photo ${bestAttempt.queryPhoto.number}, below the acceptance threshold or too close to another plant. Using Pl@ntNet.`
       : "Local photo matching found no usable score. Using Pl@ntNet.");
     return null;
   }
@@ -723,7 +749,11 @@ async function localPlantMatchFor(payload) {
         providerName: "gardenin photos",
         providerPlantID: plant.id,
         source: "local-repository",
-        sampleCount: match.sampleCount
+        sampleCount: match.sampleCount,
+        queryPhotoCount: queryFeatures.length,
+        queryPhotoNumber: matchedAttempt.queryPhoto.number,
+        bestSampleConfidence: match.bestSampleConfidence,
+        runnerUpConfidence: match.runnerUpConfidence
       },
       issues: []
     }
@@ -767,6 +797,36 @@ function photoDataUrlsForPlant(plant) {
   return [...new Set(urls)];
 }
 
+function scanPhotosFromPayload(payload) {
+  const photos = Array.isArray(payload?.queryPhotos) && payload.queryPhotos.length
+    ? payload.queryPhotos
+    : [{
+      imageDataUrl: payload?.imageDataUrl,
+      capturedAt: new Date().toISOString(),
+      cropBox: payload?.focusBox || focusBox,
+      quality: payload?.quality || null,
+      isPrimary: true
+    }];
+
+  const seen = new Set();
+  return photos
+    .map((photo, index) => ({
+      number: index + 1,
+      imageDataUrl: photo.imageDataUrl,
+      capturedAt: photo.capturedAt || new Date().toISOString(),
+      cropBox: photo.cropBox || payload?.focusBox || focusBox,
+      quality: photo.quality || null,
+      isPrimary: Boolean(photo.isPrimary)
+    }))
+    .filter((photo) => {
+      if (!photo.imageDataUrl || seen.has(photo.imageDataUrl)) {
+        return false;
+      }
+      seen.add(photo.imageDataUrl);
+      return true;
+    });
+}
+
 function showKnownPlantRecognition(plant, candidate) {
   activeCandidate = candidate;
   activeCandidates = [candidate];
@@ -800,31 +860,59 @@ function confirmKnownPlantObservation() {
     return;
   }
 
+  const sightingPhotos = scanPhotosFromPayload(pendingKnownPlantPayload || {
+    imageDataUrl: lastScanCropDataUrl,
+    focusBox
+  });
+  const primaryPhoto = sightingPhotos.find((photo) => photo.isPrimary) || sightingPhotos[0];
+  const extraPhotos = sightingPhotos.filter((photo) => photo !== primaryPhoto);
+
   plant.careLogs.unshift({
     id: makeId("log"),
     action: "observe",
     date: new Date().toISOString(),
-    notes: "Recognized from camera scan.",
+    notes: `Recognized from gardenin photos at ${confidencePercent(activeCandidate)}.`,
     observation: {
       id: makeId("photo"),
-      cropImageDataUrl: lastScanCropDataUrl,
-      cropBox: focusBox,
+      cropImageDataUrl: primaryPhoto?.imageDataUrl || lastScanCropDataUrl,
+      cropBox: primaryPhoto?.cropBox || focusBox,
       fullFrameStored: false,
       providerName: activeCandidate?.metadata?.providerName || null,
-      confidence: activeCandidate?.confidence || null
+      confidence: activeCandidate?.confidence || null,
+      queryPhotoNumber: activeCandidate?.metadata?.queryPhotoNumber || null
     }
   });
+
+  if (plant.photoUse?.personalRecognition === true && extraPhotos.length > 0) {
+    plant.trainingPhotos = [
+      ...(plant.trainingPhotos || []),
+      ...extraPhotos.map((photo) => ({
+        id: makeId("photo"),
+        cropImageDataUrl: photo.imageDataUrl,
+        capturedAt: photo.capturedAt || new Date().toISOString(),
+        cropBox: photo.cropBox || focusBox,
+        fullFrameStored: false,
+        reason: "recognition-sighting",
+        shotType: "Recognition sighting",
+        quality: photo.quality || null
+      }))
+    ];
+  }
+
   savePlants();
   renderPlants();
   knownPlantPopover.hidden = true;
   pendingKnownPlantId = null;
   pendingProviderFallbackPayload = null;
+  pendingKnownPlantPayload = null;
+  renderRecognitionDebug(`Logged sighting for ${plant.nickname}. ${extraPhotos.length ? `Added ${extraPhotos.length} extra recognition crop(s).` : "Observation crop saved."}`);
   flashCameraStage();
 }
 
 function rejectKnownPlantObservation() {
   knownPlantPopover.hidden = true;
   pendingKnownPlantId = null;
+  pendingKnownPlantPayload = null;
   if (activeCandidate?.metadata?.source === "local-repository" && pendingProviderFallbackPayload) {
     const payload = pendingProviderFallbackPayload;
     pendingProviderFallbackPayload = null;
@@ -1526,6 +1614,13 @@ async function identifyBestGardenScanCapture() {
       cropBox: capture.cropBox,
       quality: capture.quality
     }));
+  const queryPhotos = gardenScanCaptures.map((capture, index) => ({
+    imageDataUrl: capture.imageDataUrl,
+    capturedAt: capture.capturedAt,
+    cropBox: capture.cropBox,
+    quality: capture.quality,
+    isPrimary: index === bestCaptureIndex
+  }));
 
   renderRecognitionDebug(`Garden scan: selected photo ${bestCapture.number} of 3 at ${Math.round(bestCapture.quality.score * 100)}% quality.`);
   await identifyFromImage({
@@ -1533,6 +1628,7 @@ async function identifyBestGardenScanCapture() {
     imageSignature: Math.round(bestCapture.quality.score * 1000),
     focusBox,
     quality: bestCapture.quality,
+    queryPhotos,
     extraTrainingPhotos
   });
 }
@@ -1875,7 +1971,11 @@ function setScanMode(mode) {
 }
 
 function scanTrainingPhotosFromPayload(payload) {
-  return (payload?.extraTrainingPhotos || []).map((photo) => ({
+  const sourcePhotos = Array.isArray(payload?.queryPhotos) && payload.queryPhotos.length
+    ? payload.queryPhotos.filter((photo) => !photo.isPrimary)
+    : payload?.extraTrainingPhotos || [];
+
+  return sourcePhotos.map((photo) => ({
     id: makeId("photo"),
     cropImageDataUrl: photo.imageDataUrl,
     capturedAt: photo.capturedAt || new Date().toISOString(),
@@ -1935,7 +2035,16 @@ function renderPlants() {
 }
 
 function recognitionReadinessForPlant(plant) {
-  const photoCount = photoDataUrlsForPlant(plant).length;
+  const savedCropCount = photosForPlant(plant).length;
+  const recognitionCropCount = photoDataUrlsForPlant(plant).length;
+  if (plant.photoUse?.personalRecognition !== true && savedCropCount > 0) {
+    return {
+      text: `Recognition off: ${savedCropCount} crop photo${savedCropCount === 1 ? "" : "s"} saved. Turn it on in Data.`,
+      className: "is-building"
+    };
+  }
+
+  const photoCount = recognitionCropCount;
   if (photoCount >= localRecognitionMinimumPhotos) {
     return {
       text: `Recognition ready: ${photoCount} crop photos saved.`,
@@ -2079,14 +2188,17 @@ function photosForPlant(plant) {
     if (!photo.cropImageDataUrl) {
       return;
     }
+    const labelByReason = {
+      "future-recognition": `Future recognition photo ${index + 1}`,
+      "recognition-sighting": `Recognition sighting photo ${index + 1}`,
+      "scan-extra-angle": `Extra scan angle ${index + 1}`
+    };
 
     photos.push({
       id: photo.id,
       source: "trainingPhoto",
       imageDataUrl: photo.cropImageDataUrl,
-      label: photo.reason === "future-recognition"
-        ? `Future recognition photo ${index + 1}`
-        : `Training photo ${index + 1}`,
+      label: labelByReason[photo.reason] || `Training photo ${index + 1}`,
       capturedAt: photo.capturedAt || plant.dateAdded,
       type: "Plant-box crop"
     });
@@ -2690,7 +2802,8 @@ function sanitizePlantRecord(plant) {
       cropBox: photo.cropBox || plant.identification?.observationBox || null,
       fullFrameStored: false,
       reason: photo.reason || null,
-      shotType: photo.shotType || null
+      shotType: photo.shotType || null,
+      quality: photo.quality || null
     })),
     careLogs: (plant.careLogs || []).map((log) => ({
       ...log,
