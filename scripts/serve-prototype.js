@@ -5,6 +5,7 @@ const path = require("node:path");
 loadLocalEnv();
 
 const { identifyPlant } = require("./plant-id-provider");
+const { mobileApiContract } = require("./mobile-contract");
 const { hasPerenualKey, searchPerenualPlant } = require("./perenual-provider");
 
 const root = path.resolve(__dirname, "..", "prototype");
@@ -30,8 +31,14 @@ const server = http.createServer(async (request, response) => {
       writeJson(response, 200, {
         plantIdProvider: process.env.PLANT_ID_PROVIDER || "demo",
         hasPlantNetKey: Boolean(process.env.PLANTNET_API_KEY),
-        hasPerenualKey: hasPerenualKey()
+        hasPerenualKey: hasPerenualKey(),
+        contractVersion: mobileApiContract.version
       });
+      return;
+    }
+
+    if (request.method === "GET" && requestUrl.pathname === "/api/mobile-contract") {
+      writeJson(response, 200, mobileApiContract);
       return;
     }
 

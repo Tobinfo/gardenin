@@ -75,11 +75,14 @@ Do not let mobile clients hold provider secrets. Mobile apps should call gardeni
 
 - `POST /api/identify`
 - `GET /api/weather?zip=#####`
+- `GET /api/mobile-contract`
 - Future `POST /api/plants`
 - Future `POST /api/photos`
 - Future `POST /api/care-logs`
 - Future `POST /api/recognition-events`
 - Future `GET /api/sync`
+
+The detailed shared data contract is tracked in `docs/API_CONTRACT.md`. The server also exposes a machine-readable summary at `GET /api/mobile-contract` so native clients can verify the contract version they are targeting.
 
 ## Mobile Readiness Rules For Browser Work
 

@@ -1,6 +1,6 @@
-# GardenSnap Project Context
+# gardenin Project Context
 
-floraos is a laptop-first prototype for plant identification and care tracking, with an iOS SwiftUI scaffold kept as the later native target.
+gardenin is a laptop-first prototype for plant identification and care tracking, with an iOS SwiftUI scaffold kept as the later native target.
 
 The core workflow is:
 
@@ -21,7 +21,7 @@ The repo contains:
 - Unit tests in `GardenSnapTests/`.
 - A local Node static server in `scripts/serve-prototype.js`.
 - A plant identification provider boundary in `scripts/plant-id-provider.js`.
-- A Render-hosted web service connected to `https://github.com/Tobinfo/floraos`.
+- A Render-hosted web service connected to `https://github.com/Tobinfo/gardenin`.
 - XcodeGen configuration in `project.yml`.
 
 ## Current Constraints
@@ -30,12 +30,13 @@ The repo contains:
 - Ignore OneDrive for this project.
 - Real plant identification should run through Pl@ntNet when `PLANT_ID_PROVIDER=plantnet` and `PLANTNET_API_KEY` are available.
 - Demo identification exists only as a test/fallback path and must not be confused with production scan behavior.
-- Weather is currently demo forecast data.
+- Weather is available through `/api/weather?zip=#####` using Open-Meteo.
 - Plant data is currently stored in browser local storage. A real hosted database is needed before the app can reliably collect long-term user photos, corrections, weather context, and care habits.
 - The browser prototype is the source of truth for current product behavior.
 - The iOS app should avoid racing ahead until the laptop workflow stabilizes.
 - Android/iOS planning should stay active while browser behavior is built. New browser features should map cleanly to native camera, permissions, local cache, hosted sync, and platform UI.
 - The hosted Render URL is `https://floraos.onrender.com`.
+- The shared web/server/mobile contract is tracked in `docs/API_CONTRACT.md` and exposed by the server at `/api/mobile-contract`.
 
 ## Architecture Notes
 

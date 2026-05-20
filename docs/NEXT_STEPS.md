@@ -54,6 +54,7 @@
 - ID-only best-photo scoring uses sharpness, usable brightness, contrast, and plant-like color/texture inside the crop.
 - ID-only results can optionally save the best crop to a personal ID gallery. Optional ZIP/place note fields are manual only, and the user can also request one-time browser device location. No reverse geocoding or location lookup API is used.
 - Android/iOS planning is now tracked in `docs/MOBILE_PLAN.md`. Browser features should preserve a clean mobile path rather than depending on desktop-only assumptions.
+- `docs/API_CONTRACT.md` now defines the shared web/server/mobile data contract. The server exposes the current contract version and summary at `/api/mobile-contract`.
 - Product/pricing ideas are tracked in `docs/IDEAS.md`.
 - No-subscription water probe direction: support Wi-Fi gateways such as Ecowitt WH51 with GW1100/GW2000, Bluetooth plant sensors such as Mi Flora/Flower Care for pots, and later ESP32 DIY probes for custom beds.
 - If this chat context closes, reopen `C:\dev\plant watering` and ask Codex to read `PROJECT_CONTEXT.md`, `docs/NEXT_STEPS.md`, and `docs/DECISIONS.md`.
@@ -86,4 +87,5 @@
 13. Add hosted persistence for plant records, crop photos, care logs, weather snapshots, and recognition events.
 14. Use Perenual plant details to enrich saved plant care profiles after ID/manual confirmation.
 15. Add a full user-visible data settings screen for consent, export, and account deletion.
-16. Start the first native mobile proof once the server API and hosted storage boundary are stable enough.
+16. Choose the hosted database/object storage provider and implement the first persistence endpoints from `docs/API_CONTRACT.md`.
+17. Start the first native mobile proof once the server API and hosted storage boundary are stable enough.

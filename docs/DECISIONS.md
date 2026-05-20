@@ -149,3 +149,11 @@ Decision: Keep the browser prototype as the fastest product-learning surface, bu
 Reason: The product will need mobile camera capture, permission handling, offline/local cache, hosted sync, and native reminders. Browser work should not create product behavior that cannot translate cleanly to mobile.
 
 Implementation note: `docs/MOBILE_PLAN.md` is the mobile planning source. The first native milestone should likely be ID-only identification with three-photo capture, best-photo selection, provider ID through the server, and optional save to personal ID gallery.
+
+## 2026-05-20: Shared Mobile API Contract
+
+Decision: Define a shared API/data contract before building native Android or iOS clients.
+
+Reason: Mobile clients need stable server endpoints and record shapes, and they must not hold Pl@ntNet, Perenual, weather, or future AI provider secrets.
+
+Implementation note: `docs/API_CONTRACT.md` is the human-readable source. `scripts/mobile-contract.js` exposes the current contract version and endpoint summary through `GET /api/mobile-contract`.
