@@ -9,6 +9,7 @@
   <body>
     <main class="app-shell">
       <section class="scan-panel" aria-label="Plant scanner">
+        <div class="mode-status" id="scan-mode-status">Garden scan</div>
         <div class="camera-stage" id="camera-stage">
           <video id="camera" autoplay playsinline muted></video>
           <canvas id="snapshot" hidden></canvas>
@@ -207,6 +208,24 @@
         <div class="scan-actions">
           <button class="primary-button" id="more-photos-take" type="button">Take photo</button>
           <button class="ghost-button" id="more-photos-done" type="button">Done</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="consent-dialog capture-assist" id="garden-scan-capture" role="dialog" aria-modal="false" aria-labelledby="garden-scan-title" hidden>
+      <div class="consent-panel">
+        <p class="eyebrow">Garden scan</p>
+        <h2 id="garden-scan-title">Take 3 plant-box photos</h2>
+        <p>gardenin sends the strongest crop for ID. Extra crops are saved only after you save the plant.</p>
+        <ol class="training-progress" id="garden-scan-progress" aria-label="Garden scan photo progress">
+          <li data-step="garden-photo-1"><span>Photo 1</span><strong>Needed</strong></li>
+          <li data-step="garden-photo-2"><span>Photo 2</span><strong>Needed</strong></li>
+          <li data-step="garden-photo-3"><span>Photo 3</span><strong>Needed</strong></li>
+        </ol>
+        <p class="quality-note" id="garden-scan-quality">Best photo: waiting.</p>
+        <div class="scan-actions">
+          <button class="primary-button" id="garden-scan-take" type="button">Take photo 1</button>
+          <button class="ghost-button" id="garden-scan-cancel" type="button">Cancel</button>
         </div>
       </div>
     </section>

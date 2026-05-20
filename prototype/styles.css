@@ -75,6 +75,26 @@ button:disabled {
   padding: 14px;
 }
 
+.mode-status {
+  display: inline-flex;
+  align-items: center;
+  align-self: flex-start;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #b7dccb;
+  border-radius: 999px;
+  background: #e6f3ed;
+  color: var(--leaf-dark);
+  font-size: 0.82rem;
+  font-weight: 900;
+}
+
+.app-shell.is-id-only-mode .mode-status {
+  border-color: #ead6a6;
+  background: #fff8ec;
+  color: var(--warning);
+}
+
 .camera-stage {
   position: relative;
   display: grid;
@@ -439,6 +459,15 @@ h3 {
   gap: 14px;
   padding: 16px;
   overflow: hidden;
+}
+
+.app-shell.is-id-only-mode .workspace {
+  opacity: 0.58;
+}
+
+.app-shell.is-id-only-mode .care-buttons,
+.app-shell.is-id-only-mode #quick-add {
+  pointer-events: none;
 }
 
 .top-bar {

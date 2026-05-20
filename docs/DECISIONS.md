@@ -157,3 +157,11 @@ Decision: Define a shared API/data contract before building native Android or iO
 Reason: Mobile clients need stable server endpoints and record shapes, and they must not hold Pl@ntNet, Perenual, weather, or future AI provider secrets.
 
 Implementation note: `docs/API_CONTRACT.md` is the human-readable source. `scripts/mobile-contract.js` exposes the current contract version and endpoint summary through `GET /api/mobile-contract`.
+
+## 2026-05-20: Mode Boundaries Before More Features
+
+Decision: Garden Scan, saved-plant recognition, Quick add/manual entry, and ID-only must remain visibly and logically separate.
+
+Reason: Blending these modes makes Pl@ntNet guesses look like gardenin recognition, makes ID-only feel like garden tracking, and allows care guidance without a supporting photo.
+
+Implementation note: Saved-plant flash recognition should only come from the user's local crop-photo repository. Garden Scan and ID-only both use three crop photos and submit only the strongest crop. Quick add now requires a current camera crop before saving care guidance.

@@ -1,4 +1,6 @@
 const camera = document.querySelector("#camera");
+const appShell = document.querySelector(".app-shell");
+const scanModeStatus = document.querySelector("#scan-mode-status");
 const cameraStage = document.querySelector("#camera-stage");
 const snapshot = document.querySelector("#snapshot");
 const capturedPreview = document.querySelector("#captured-preview");
@@ -70,6 +72,11 @@ const morePhotosPlantInput = document.querySelector("#more-photos-plant");
 const morePhotosCount = document.querySelector("#more-photos-count");
 const morePhotosTakeButton = document.querySelector("#more-photos-take");
 const morePhotosDoneButton = document.querySelector("#more-photos-done");
+const gardenScanCaptureDialog = document.querySelector("#garden-scan-capture");
+const gardenScanProgress = document.querySelector("#garden-scan-progress");
+const gardenScanQuality = document.querySelector("#garden-scan-quality");
+const gardenScanTakeButton = document.querySelector("#garden-scan-take");
+const gardenScanCancelButton = document.querySelector("#garden-scan-cancel");
 const idOnlyCaptureDialog = document.querySelector("#id-only-capture");
 const idOnlyProgress = document.querySelector("#id-only-progress");
 const idOnlyQuality = document.querySelector("#id-only-quality");
@@ -107,6 +114,7 @@ let pendingKnownPlantId = null;
 let pendingMorePhotosCount = 0;
 let pendingProviderFallbackPayload = null;
 let activePhotoLibraryPlantId = null;
+let gardenScanCaptures = [];
 let idOnlyCaptures = [];
 let isIdOnlyResult = false;
 let activeIdOnlyGalleryCandidate = null;
@@ -223,6 +231,8 @@ trainingCaptureButton.addEventListener("click", captureTrainingPhoto);
 trainingCaptureStopButton.addEventListener("click", closeTrainingCapture);
 morePhotosTakeButton.addEventListener("click", captureMoreRecognitionPhoto);
 morePhotosDoneButton.addEventListener("click", closeMorePhotosRequest);
+gardenScanTakeButton.addEventListener("click", captureGardenScanPhoto);
+gardenScanCancelButton.addEventListener("click", closeGardenScanCapture);
 idOnlyTakeButton.addEventListener("click", captureIdOnlyPhoto);
 idOnlyCancelButton.addEventListener("click", closeIdOnlyCapture);
 idOnlyGalleryCloseButton.addEventListener("click", closeIdOnlyGallery);
@@ -379,8 +389,12 @@ async function captureAndIdentify() {
     return;
   }
 
+  await startGardenScanCapture();
+}
+
+function captureCurrentFrame() {
   if (!stream || !camera.videoWidth) {
-    return;
+    return null;
   }
 
   snapshot.width = camera.videoWidth;
@@ -388,12 +402,18 @@ async function captureAndIdentify() {
   const context = snapshot.getContext("2d");
   context.drawImage(camera, 0, 0, snapshot.width, snapshot.height);
   const dataUrl = snapshot.toDataURL("image/jpeg", 0.82);
-  const focusedDataUrl = cropDataUrl(snapshot, focusBox);
+  const cropCanvas = cropCanvasFor(snapshot, focusBox);
+  const focusedDataUrl = cropCanvas.toDataURL("image/jpeg", 0.86);
   lastScanImageDataUrl = dataUrl;
   lastScanCropDataUrl = focusedDataUrl;
 
   const imageSignature = getImageSignature(context, snapshot.width, snapshot.height);
-  await identifyFromImage({ imageDataUrl: focusedDataUrl, imageSignature, focusBox });
+  return {
+    imageDataUrl: dataUrl,
+    cropImageDataUrl: focusedDataUrl,
+    imageSignature,
+    quality: scoreCropQuality(cropCanvas)
+  };
 }
 
 function getImageSignature(context, width, height) {
@@ -503,6 +523,7 @@ async function identifyFromImage(payload, options = {}) {
 }
 
 function showCandidates(candidates, payload) {
+  setScanMode("garden");
   isIdOnlyResult = false;
   activeIdOnlyGalleryCandidate = null;
   idOnlySavePhotoButton.hidden = true;
@@ -514,18 +535,16 @@ function showCandidates(candidates, payload) {
     fullFrameStored: false,
     consentForPersonalRecognition: photoTrainingConsent === "yes"
   } : null;
+  const pendingScanPhotos = photoTrainingConsent === "yes"
+    ? scanTrainingPhotosFromPayload(payload)
+    : [];
   activeCandidates = candidates.map((candidate) => ({
     ...normalizeCandidate(candidate),
-    trainingSample
+    trainingSample,
+    pendingScanPhotos
   }));
 
   pendingProviderFallbackPayload = null;
-  const knownPlant = knownPlantFor(activeCandidates[0]);
-  if (knownPlant && payload?.imageDataUrl && !Number.isInteger(payload.demoIndex)) {
-    showKnownPlantRecognition(knownPlant, activeCandidates[0]);
-    return;
-  }
-
   selectCandidate(0);
 
   if (payload?.imageDataUrl && !Number.isInteger(payload.demoIndex)) {
@@ -534,6 +553,7 @@ function showCandidates(candidates, payload) {
 }
 
 function showIdOnlyCandidates(candidates, payload) {
+  setScanMode("id-only");
   isIdOnlyResult = true;
   activeIdOnlyQuality = payload.quality || null;
   activeCandidates = candidates.map(normalizeCandidate);
@@ -569,7 +589,7 @@ function selectIdOnlyCandidate(index) {
   };
   reviewAddButton.hidden = false;
   reviewAddButton.disabled = isNoReliableMatch;
-  reviewAddButton.textContent = "Confirm ID";
+  reviewAddButton.textContent = "Use this ID";
   idOnlySavePhotoButton.hidden = isNoReliableMatch;
   idOnlySavePhotoButton.disabled = isNoReliableMatch;
   idOnlySavePhotoButton.textContent = "Save best photo";
@@ -729,25 +749,6 @@ function photoDataUrlsForPlant(plant) {
   return [...new Set(urls)];
 }
 
-function knownPlantFor(candidate) {
-  if (!candidate || isNoReliableCandidate(candidate) || candidate.confidence < weakConfidence) {
-    return null;
-  }
-
-  const candidateSpecies = normalizePlantName(candidate.profile.commonName);
-  const candidateScientific = normalizePlantName(candidate.profile.scientificName);
-  return plants.find((plant) => {
-    const plantSpecies = normalizePlantName(plant.species?.commonName);
-    const plantScientific = normalizePlantName(plant.species?.scientificName);
-    return plantSpecies && (
-      plantSpecies === candidateSpecies ||
-      plantSpecies === candidateScientific ||
-      plantScientific === candidateSpecies ||
-      plantScientific === candidateScientific
-    );
-  }) || null;
-}
-
 function showKnownPlantRecognition(plant, candidate) {
   activeCandidate = candidate;
   activeCandidates = [candidate];
@@ -819,13 +820,6 @@ function rejectKnownPlantObservation() {
     selectCandidate(0);
     freezeFeedForReview();
   }
-}
-
-function normalizePlantName(value) {
-  return String(value || "")
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ");
 }
 
 function normalizeCandidate(candidate) {
@@ -983,6 +977,7 @@ function cameraErrorMessage(error) {
 }
 
 function openIdOnlyCapture() {
+  setScanMode("id-only");
   idOnlyCaptures = [];
   isIdOnlyResult = false;
   activeIdOnlyLocation = { zip: "", placeNote: "" };
@@ -1106,7 +1101,11 @@ function roundCoordinate(value) {
 }
 
 function bestIdOnlyCapture() {
-  return idOnlyCaptures
+  return bestCaptureFrom(idOnlyCaptures);
+}
+
+function bestCaptureFrom(captures) {
+  return captures
     .map((capture, index) => ({
       ...capture,
       number: index + 1
@@ -1138,6 +1137,7 @@ function updateIdOnlyProgress() {
 }
 
 function closeIdOnlyCapture() {
+  setScanMode("garden");
   idOnlyCaptureDialog.hidden = true;
   idOnlyCaptures = [];
   idOnlyTakeButton.disabled = false;
@@ -1146,6 +1146,7 @@ function closeIdOnlyCapture() {
 
 function confirmIdOnlyResult() {
   renderRecognitionDebug(`ID only confirmed: ${activeCandidate.profile.commonName}. It was not added to the garden and no care tracking was created.`);
+  setScanMode("garden");
   scanResult.hidden = true;
   detectionBox.hidden = true;
   isIdOnlyResult = false;
@@ -1350,9 +1351,11 @@ function openReview() {
 }
 
 function retryScan() {
+  setScanMode("garden");
   isIdOnlyResult = false;
   activeIdOnlyGalleryCandidate = null;
   closeReview();
+  closeGardenScanCapture();
   closeIdOnlyCapture();
   knownPlantPopover.hidden = true;
   morePhotosRequestDialog.hidden = true;
@@ -1448,6 +1451,109 @@ function closeMorePhotosRequest() {
   pendingMorePhotosCount = 0;
 }
 
+async function startGardenScanCapture() {
+  setScanMode("garden");
+  gardenScanCaptures = [];
+  activeIdOnlyGalleryCandidate = null;
+  isIdOnlyResult = false;
+  closeReview();
+  closeIdOnlyCapture();
+  knownPlantPopover.hidden = true;
+  scanResult.hidden = true;
+  detectionBox.hidden = true;
+  gardenScanCaptureDialog.hidden = false;
+  renderRecognitionDebug("Garden scan: take 3 photos. gardenin will send the strongest crop only.");
+  updateGardenScanProgress();
+  await captureGardenScanPhoto();
+}
+
+async function captureGardenScanPhoto() {
+  if (!stream || !camera.videoWidth) {
+    await startCamera();
+    return;
+  }
+
+  const frame = captureCurrentFrame();
+  if (!frame) {
+    return;
+  }
+
+  gardenScanCaptures.push({
+    imageDataUrl: frame.cropImageDataUrl,
+    previewDataUrl: frame.imageDataUrl,
+    imageSignature: frame.imageSignature,
+    capturedAt: new Date().toISOString(),
+    cropBox: focusBox,
+    fullFrameStored: false,
+    quality: frame.quality
+  });
+  flashCameraStage();
+  updateGardenScanProgress();
+
+  if (gardenScanCaptures.length >= 3) {
+    await identifyBestGardenScanCapture();
+  }
+}
+
+async function identifyBestGardenScanCapture() {
+  const bestCapture = bestCaptureFrom(gardenScanCaptures);
+  if (!bestCapture) {
+    return;
+  }
+
+  gardenScanCaptureDialog.hidden = true;
+  lastScanImageDataUrl = bestCapture.previewDataUrl;
+  lastScanCropDataUrl = bestCapture.imageDataUrl;
+  const bestCaptureIndex = bestCapture.number - 1;
+  const extraTrainingPhotos = gardenScanCaptures
+    .filter((capture, index) => index !== bestCaptureIndex)
+    .map((capture) => ({
+      imageDataUrl: capture.imageDataUrl,
+      capturedAt: capture.capturedAt,
+      cropBox: capture.cropBox,
+      quality: capture.quality
+    }));
+
+  renderRecognitionDebug(`Garden scan: selected photo ${bestCapture.number} of 3 at ${Math.round(bestCapture.quality.score * 100)}% quality.`);
+  await identifyFromImage({
+    imageDataUrl: bestCapture.imageDataUrl,
+    imageSignature: Math.round(bestCapture.quality.score * 1000),
+    focusBox,
+    quality: bestCapture.quality,
+    extraTrainingPhotos
+  });
+}
+
+function closeGardenScanCapture() {
+  gardenScanCaptureDialog.hidden = true;
+  gardenScanCaptures = [];
+  gardenScanTakeButton.disabled = false;
+  updateGardenScanProgress();
+}
+
+function updateGardenScanProgress() {
+  for (let index = 0; index < 3; index += 1) {
+    const item = gardenScanProgress.querySelector(`[data-step="garden-photo-${index + 1}"]`);
+    if (!item) {
+      continue;
+    }
+
+    const capture = gardenScanCaptures[index];
+    item.classList.toggle("is-complete", Boolean(capture));
+    item.querySelector("strong").textContent = capture
+      ? `${Math.round(capture.quality.score * 100)}%`
+      : "Needed";
+  }
+
+  const next = Math.min(gardenScanCaptures.length + 1, 3);
+  gardenScanTakeButton.textContent = gardenScanCaptures.length >= 3 ? "Identifying" : `Take photo ${next}`;
+  gardenScanTakeButton.disabled = gardenScanCaptures.length >= 3;
+  const bestCapture = bestCaptureFrom(gardenScanCaptures);
+  gardenScanQuality.textContent = bestCapture
+    ? `Best photo: ${bestCapture.number} of 3, ${Math.round(bestCapture.quality.score * 100)}% quality (${bestCapture.quality.reason}).`
+    : "Best photo: waiting.";
+}
+
 function freezeFeedForReview() {
   if (!lastScanImageDataUrl) {
     return;
@@ -1475,12 +1581,20 @@ function freezeFeedForReview() {
   startCameraButton.textContent = "Camera feed on";
 }
 
-function openQuickAdd() {
+async function openQuickAdd() {
+  setScanMode("garden");
+  const frame = await currentFrameForManualEntry();
+  if (!frame) {
+    return;
+  }
+
   quickSpeciesInput.value = "0";
   activeCandidate = quickAddCandidate(profiles[0]);
+  activeCandidate.trainingSample = trainingSampleFromCrop(frame.cropImageDataUrl);
   activeCandidates = [activeCandidate];
   detectionBox.hidden = true;
   scanResult.hidden = true;
+  freezeFeedForReview();
   prepareReview("quick");
 }
 
@@ -1539,6 +1653,35 @@ function quickAddCandidate(profile) {
 
 function closeReview() {
   reviewPanel.hidden = true;
+}
+
+async function currentFrameForManualEntry() {
+  if (isFrozenAfterScan && lastScanCropDataUrl) {
+    return {
+      imageDataUrl: lastScanImageDataUrl,
+      cropImageDataUrl: lastScanCropDataUrl,
+      imageSignature: 0
+    };
+  }
+
+  if (!stream || !camera.videoWidth) {
+    renderRecognitionDebug("Quick add needs a current plant photo. Start the camera, frame the plant, then use Quick add.");
+    await startCamera();
+    return null;
+  }
+
+  return captureCurrentFrame();
+}
+
+function trainingSampleFromCrop(cropImageDataUrl) {
+  return {
+    id: makeId("photo"),
+    cropImageDataUrl,
+    capturedAt: new Date().toISOString(),
+    cropBox: focusBox,
+    fullFrameStored: false,
+    consentForPersonalRecognition: photoTrainingConsent === "yes"
+  };
 }
 
 function maybeAskForTrainingPhotos(plant) {
@@ -1669,6 +1812,11 @@ function savePlant() {
     return;
   }
 
+  if (!activeCandidate.trainingSample?.cropImageDataUrl) {
+    renderRecognitionDebug("A current plant photo is required before saving care guidance.");
+    return;
+  }
+
   const plant = {
     id: crypto.randomUUID(),
     nickname: plantNameInput.value.trim() || suggestedName(activeCandidate.profile),
@@ -1694,6 +1842,7 @@ function savePlant() {
       ...issue,
       date: new Date().toISOString()
     })),
+    trainingPhotos: activeCandidate.pendingScanPhotos || [],
     careLogs: []
   };
 
@@ -1702,6 +1851,27 @@ function savePlant() {
   renderPlants();
   closeReview();
   maybeAskForTrainingPhotos(plant);
+}
+
+function setScanMode(mode) {
+  const isIdOnlyMode = mode === "id-only";
+  appShell.classList.toggle("is-id-only-mode", isIdOnlyMode);
+  scanModeStatus.textContent = isIdOnlyMode
+    ? "ID only - not garden tracking"
+    : "Garden scan";
+}
+
+function scanTrainingPhotosFromPayload(payload) {
+  return (payload?.extraTrainingPhotos || []).map((photo) => ({
+    id: makeId("photo"),
+    cropImageDataUrl: photo.imageDataUrl,
+    capturedAt: photo.capturedAt || new Date().toISOString(),
+    cropBox: photo.cropBox || focusBox,
+    fullFrameStored: false,
+    reason: "scan-extra-angle",
+    shotType: "Extra scan angle",
+    quality: photo.quality || null
+  }));
 }
 
 function suggestedName(profile) {
