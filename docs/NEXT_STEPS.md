@@ -19,6 +19,7 @@
 - Plant identification now goes through `/api/identify`, backed by `scripts/plant-id-provider.js`; Pl@ntNet is the intended real provider and demo data should stay behind the Demo/Test path only.
 - The camera starts from the Ready button inside the scan box. The live feed is framed with a focus box; captured ID sends the focused crop to the server and uses the focus box as the visual plant separation area.
 - `scripts/plant-id-provider.js` now has a Pl@ntNet connector path. It needs `PLANT_ID_PROVIDER=plantnet` and `PLANTNET_API_KEY` before it can return real IDs.
+- `scripts/perenual-provider.js` now has a Perenual plant data lookup path. It needs `PERENUAL_API_KEY`; this is intended first for care/profile enrichment, not as the primary image ID provider.
 - A local ignored `.env` now stores the Pl@ntNet provider settings for this machine.
 - `Start GardenSnap Prototype.cmd` now clears the old local server on port 5173, opens the app, and starts the server with local `.env` settings.
 - Render is connected to `https://github.com/Tobinfo/floraos`; the hosted service is `https://floraos.onrender.com`.
@@ -71,3 +72,4 @@
 11. Add a real hosted database/object store so crop images and training photos survive across devices and browser resets.
 12. Improve saved-plant recognition beyond species matching by comparing user training photos/embeddings once a real repository/model exists.
 13. Add a true repository/model matcher that uses saved plant training photos before calling Pl@ntNet.
+14. Use Perenual plant details to enrich saved plant care profiles after ID/manual confirmation.
