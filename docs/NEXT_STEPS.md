@@ -42,6 +42,7 @@
 - Training capture now gives feedback for all three photos: the original scan is shown as saved, then `Take 1` and `Take 2` update as each extra plant-box crop is captured.
 - Repository recognition loop: saved-plant point-and-ID should keep improving from the user's own labeled crop photos. If recognition fails later, ask `Take more photos for future recognition?` and let the user capture as many plant-box crop photos as they want. These should train or populate gardenin's own user-plant repository so future recognition can happen without an external API call.
 - A first implementation hook exists: after a failed/very low-confidence scan, if saved plants exist, the user can choose `More photos`, select a saved plant, and take unlimited plant-box crop photos for future recognition.
+- Each saved plant now has a Photos view that pulls together its original ID crop, extra training crops, and later recognition/observation crops from local saved data.
 - Product/pricing ideas are tracked in `docs/IDEAS.md`.
 - No-subscription water probe direction: support Wi-Fi gateways such as Ecowitt WH51 with GW1100/GW2000, Bluetooth plant sensors such as Mi Flora/Flower Care for pots, and later ESP32 DIY probes for custom beds.
 - If this chat context closes, reopen `C:\dev\plant watering` and ask Codex to read `PROJECT_CONTEXT.md`, `docs/NEXT_STEPS.md`, and `docs/DECISIONS.md`.
@@ -52,7 +53,7 @@
 - Should weather use WeatherKit or another provider?
 - Should plant care schedules become user-adjustable?
 - Should the app support garden zones/beds as first-class objects?
-- Should photos be saved with each plant record?
+- What export/delete controls should exist for a user's saved plant photos?
 - What is the fastest quick-add flow: type plant name first, choose from known samples, or add unknown plant and identify later?
 - What database should hold hosted plant records, scan photos, corrections, weather context, and care history?
 - Which first water probe path should be implemented: Ecowitt Wi-Fi gateway, Bluetooth Mi Flora import, or manual/ESP32 endpoint?
@@ -73,3 +74,4 @@
 12. Improve saved-plant recognition beyond species matching by comparing user training photos/embeddings once a real repository/model exists.
 13. Add a true repository/model matcher that uses saved plant training photos before calling Pl@ntNet.
 14. Use Perenual plant details to enrich saved plant care profiles after ID/manual confirmation.
+15. Add per-photo delete/export controls and a user-visible data settings screen.

@@ -66,6 +66,10 @@ const morePhotosPlantInput = document.querySelector("#more-photos-plant");
 const morePhotosCount = document.querySelector("#more-photos-count");
 const morePhotosTakeButton = document.querySelector("#more-photos-take");
 const morePhotosDoneButton = document.querySelector("#more-photos-done");
+const photoLibraryDialog = document.querySelector("#photo-library");
+const photoLibraryTitle = document.querySelector("#photo-library-title");
+const photoLibraryCloseButton = document.querySelector("#photo-library-close");
+const photoGrid = document.querySelector("#photo-grid");
 
 const storageKey = "gardensnap.prototype.plants";
 const photoConsentKey = "gardenin.photoTrainingConsent";
@@ -174,6 +178,12 @@ trainingCaptureButton.addEventListener("click", captureTrainingPhoto);
 trainingCaptureStopButton.addEventListener("click", closeTrainingCapture);
 morePhotosTakeButton.addEventListener("click", captureMoreRecognitionPhoto);
 morePhotosDoneButton.addEventListener("click", closeMorePhotosRequest);
+photoLibraryCloseButton.addEventListener("click", closePhotoLibrary);
+photoLibraryDialog.addEventListener("click", (event) => {
+  if (event.target === photoLibraryDialog) {
+    closePhotoLibrary();
+  }
+});
 
 populateQuickSpecies();
 maybeShowPhotoConsent();
@@ -939,7 +949,8 @@ async function captureTrainingPhoto() {
     cropImageDataUrl: cropDataUrl(snapshot, focusBox),
     capturedAt: new Date().toISOString(),
     cropBox: focusBox,
-    fullFrameStored: false
+    fullFrameStored: false,
+    reason: "post-save-training"
   });
 
   if (pendingTrainingPhotos.length >= 2) {
@@ -1063,6 +1074,11 @@ function renderPlants() {
 
     card.querySelectorAll("[data-action]").forEach((button) => {
       button.addEventListener("click", () => {
+        if (button.dataset.action === "photos") {
+          openPhotoLibrary(plant);
+          return;
+        }
+
         plant.careLogs.unshift({
           action: button.dataset.action,
           date: new Date().toISOString(),
@@ -1077,6 +1093,114 @@ function renderPlants() {
   }));
 
   gardenSummary.textContent = plants.length === 1 ? "1 plant tracked" : `${plants.length} plants tracked`;
+}
+
+function openPhotoLibrary(plant) {
+  const photos = photosForPlant(plant);
+  photoLibraryTitle.textContent = `${plant.nickname} photos`;
+
+  if (photos.length === 0) {
+    const empty = document.createElement("p");
+    empty.className = "photo-empty";
+    empty.textContent = "No saved crop photos for this plant yet.";
+    photoGrid.replaceChildren(empty);
+  } else {
+    photoGrid.replaceChildren(...photos.map(photoTileFor));
+  }
+
+  photoLibraryDialog.hidden = false;
+}
+
+function closePhotoLibrary() {
+  photoLibraryDialog.hidden = true;
+  photoGrid.replaceChildren();
+}
+
+function photosForPlant(plant) {
+  const photos = [];
+
+  if (plant.trainingSample?.cropImageDataUrl) {
+    photos.push({
+      imageDataUrl: plant.trainingSample.cropImageDataUrl,
+      label: "Original ID photo",
+      capturedAt: plant.trainingSample.capturedAt || plant.dateAdded,
+      type: "Plant-box crop"
+    });
+  }
+
+  (plant.trainingPhotos || []).forEach((photo, index) => {
+    if (!photo.cropImageDataUrl) {
+      return;
+    }
+
+    photos.push({
+      imageDataUrl: photo.cropImageDataUrl,
+      label: photo.reason === "future-recognition"
+        ? `Future recognition photo ${index + 1}`
+        : `Training photo ${index + 1}`,
+      capturedAt: photo.capturedAt || plant.dateAdded,
+      type: "Plant-box crop"
+    });
+  });
+
+  (plant.careLogs || []).forEach((log) => {
+    if (!log.observation?.cropImageDataUrl) {
+      return;
+    }
+
+    photos.push({
+      imageDataUrl: log.observation.cropImageDataUrl,
+      label: "Recognition observation",
+      capturedAt: log.date,
+      type: confidenceLabel(log.observation.confidence)
+    });
+  });
+
+  return photos.sort((left, right) => dateValue(right.capturedAt) - dateValue(left.capturedAt));
+}
+
+function photoTileFor(photo) {
+  const tile = document.createElement("article");
+  tile.className = "photo-tile";
+
+  const image = document.createElement("img");
+  image.src = photo.imageDataUrl;
+  image.alt = photo.label;
+  image.loading = "lazy";
+
+  const label = document.createElement("strong");
+  label.textContent = photo.label;
+
+  const meta = document.createElement("span");
+  meta.textContent = `${formatPhotoDate(photo.capturedAt)} - ${photo.type}`;
+
+  tile.append(image, label, meta);
+  return tile;
+}
+
+function confidenceLabel(confidence) {
+  return Number.isFinite(confidence)
+    ? `${Math.round(confidence * 100)}% confidence`
+    : "Plant-box crop";
+}
+
+function formatPhotoDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return "Date unknown";
+  }
+
+  return date.toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit"
+  });
+}
+
+function dateValue(value) {
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 0 : date.getTime();
 }
 
 function recommendationsFor(plant) {
@@ -1495,7 +1619,8 @@ function sanitizePlantRecord(plant) {
       cropImageDataUrl: photo.cropImageDataUrl || null,
       capturedAt: photo.capturedAt || plant.dateAdded || null,
       cropBox: photo.cropBox || plant.identification?.observationBox || null,
-      fullFrameStored: false
+      fullFrameStored: false,
+      reason: photo.reason || null
     })),
     photoUse: {
       ...(plant.photoUse || {}),

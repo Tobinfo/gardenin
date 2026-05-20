@@ -218,6 +218,7 @@
         <p class="care-context"></p>
 
         <div class="care-buttons">
+          <button type="button" data-action="photos">Photos</button>
           <button type="button" data-action="water">Watered</button>
           <button type="button" data-action="fertilize">Fertilized</button>
           <button type="button" data-action="prune">Pruned</button>
@@ -225,6 +226,19 @@
         </div>
       </article>
     </template>
+
+    <section class="consent-dialog" id="photo-library" role="dialog" aria-modal="true" aria-labelledby="photo-library-title" hidden>
+      <div class="photo-library-panel">
+        <div class="photo-library-header">
+          <div>
+            <p class="eyebrow">Plant photos</p>
+            <h2 id="photo-library-title">Plant photos</h2>
+          </div>
+          <button class="ghost-button compact-button" id="photo-library-close" type="button">Close</button>
+        </div>
+        <div class="photo-grid" id="photo-grid"></div>
+      </div>
+    </section>
 
     <script src="./app.js"></script>
   </body>

@@ -528,6 +528,69 @@ h3 {
   align-items: center;
 }
 
+.photo-library-panel {
+  display: grid;
+  gap: 16px;
+  width: min(900px, 100%);
+  max-height: calc(100vh - 40px);
+  overflow: auto;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  box-shadow: 0 22px 70px rgba(21, 25, 20, 0.32);
+}
+
+.photo-library-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.photo-library-header h2 {
+  margin-bottom: 0;
+}
+
+.photo-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 12px;
+}
+
+.photo-tile {
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.photo-tile img {
+  width: 100%;
+  aspect-ratio: 4 / 3;
+  object-fit: cover;
+  border-radius: 6px;
+  background: #151914;
+}
+
+.photo-tile strong {
+  color: var(--ink);
+  font-size: 0.92rem;
+}
+
+.photo-tile span,
+.photo-empty {
+  color: var(--muted);
+  font-size: 0.84rem;
+  line-height: 1.35;
+}
+
+.photo-empty {
+  margin-bottom: 0;
+}
+
 .training-progress {
   display: grid;
   gap: 8px;
@@ -660,7 +723,7 @@ select {
 
 .care-buttons {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(92px, 1fr));
   gap: 8px;
 }
 

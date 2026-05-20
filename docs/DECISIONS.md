@@ -106,6 +106,12 @@ Decision: Point-and-ID for already saved plants should become repository-first. 
 
 Reason: The product goal is to identify a user's own plants from gardenin's repository/model before paying for or relying on external plant ID APIs. Every confirmed crop improves that specific user's future recognition path.
 
+## 2026-05-20: Per-Plant Photo Library
+
+Decision: Users should be able to open a saved plant and see every crop-only photo tied to that plant, including the original ID crop, extra training crops, and later recognition observation crops.
+
+Reason: The photos are the user's record and the future recognition dataset. They need to be visible, inspectable, and eventually deletable/exportable.
+
 ## 2026-05-20: Walking Mode Observation Flash
 
 Decision: In walking mode, flash-only capture is only for plants already in the user's saved/previously identified group. First-time or uncertain IDs should freeze the captured frame for confirmation before saving or giving plant-specific guidance.
