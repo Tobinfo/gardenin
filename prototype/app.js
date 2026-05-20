@@ -21,6 +21,8 @@ const matchWarning = document.querySelector("#match-warning");
 const matchAlternatives = document.querySelector("#match-alternatives");
 const matchOptions = document.querySelector("#match-options");
 const reviewAddButton = document.querySelector("#review-add");
+const retryScanButton = document.querySelector("#retry-scan");
+const manualFromScanButton = document.querySelector("#manual-from-scan");
 const quickAddButton = document.querySelector("#quick-add");
 const reviewPanel = document.querySelector("#review-panel");
 const reviewSpecies = document.querySelector("#review-species");
@@ -40,6 +42,7 @@ const weatherZipInput = document.querySelector("#weather-zip");
 const weatherPill = document.querySelector("#weather-pill");
 const gardenSummary = document.querySelector("#garden-summary");
 const photoConsentDialog = document.querySelector("#photo-consent");
+const photoConsentZipInput = document.querySelector("#photo-consent-zip");
 const photoConsentYesButton = document.querySelector("#photo-consent-yes");
 const photoConsentNoButton = document.querySelector("#photo-consent-no");
 
@@ -51,10 +54,13 @@ let activeCandidate = null;
 let activeCandidates = [];
 let plants = loadPlants();
 let lastScanImageDataUrl = null;
+let lastScanCropDataUrl = null;
+let isFrozenAfterScan = false;
 let photoTrainingConsent = loadPhotoTrainingConsent();
 const focusBox = { x: 0.18, y: 0.12, width: 0.64, height: 0.72 };
 const strongConfidence = 0.55;
 const weakConfidence = 0.25;
+const noReliableConfidence = 0.05;
 
 const profiles = [
   {
@@ -127,6 +133,8 @@ demoScanButton.addEventListener("click", () => identifyFromImage({
   focusBox
 }));
 reviewAddButton.addEventListener("click", openReview);
+retryScanButton.addEventListener("click", retryScan);
+manualFromScanButton.addEventListener("click", openManualFromScan);
 quickAddButton.addEventListener("click", openQuickAdd);
 quickSpeciesInput.addEventListener("change", updateQuickAddSpecies);
 savePlantButton.addEventListener("click", savePlant);
@@ -142,6 +150,7 @@ renderPlants();
 renderProviderStatus();
 
 async function startCamera() {
+  isFrozenAfterScan = false;
   showCameraOverlay(true, "Starting camera");
   cameraReadyButton.textContent = "Starting";
   cameraReadyButton.disabled = true;
@@ -267,6 +276,11 @@ function updateFeedStatus() {
 }
 
 async function captureAndIdentify() {
+  if (!stream && isFrozenAfterScan) {
+    await startCamera();
+    return;
+  }
+
   if (!stream || !camera.videoWidth) {
     return;
   }
@@ -278,6 +292,7 @@ async function captureAndIdentify() {
   const dataUrl = snapshot.toDataURL("image/jpeg", 0.82);
   const focusedDataUrl = cropDataUrl(snapshot, focusBox);
   lastScanImageDataUrl = dataUrl;
+  lastScanCropDataUrl = focusedDataUrl;
 
   const imageSignature = getImageSignature(context, snapshot.width, snapshot.height);
   await identifyFromImage({ imageDataUrl: focusedDataUrl, imageSignature, focusBox });
@@ -353,6 +368,8 @@ async function identifyFromImage(payload) {
       matchAlternatives.hidden = true;
       reviewAddButton.disabled = true;
       reviewAddButton.textContent = "Add plant";
+      retryScanButton.hidden = false;
+      manualFromScanButton.hidden = !lastScanCropDataUrl;
     }
   } finally {
     setIdentifying(false);
@@ -380,18 +397,22 @@ function showCandidates(candidates, payload) {
 
 function selectCandidate(index) {
   activeCandidate = activeCandidates[index];
+  const isNoReliableMatch = isNoReliableCandidate(activeCandidate);
   showCameraOverlay(false);
   renderDetectionBox(activeCandidate);
   scanGuide.hidden = Boolean(activeCandidate.observationBox);
   matchEyebrow.textContent = confidenceHeading(activeCandidate);
-  matchName.textContent = activeCandidate.profile.commonName;
+  matchName.textContent = isNoReliableMatch ? "No reliable plant match" : activeCandidate.profile.commonName;
   matchDetail.textContent = `${confidencePercent(activeCandidate)} confidence from ${activeCandidate.metadata.providerName}`;
   matchWarning.textContent = confidenceWarning(activeCandidate);
   matchWarning.hidden = !matchWarning.textContent;
-  reviewAddButton.disabled = false;
-  reviewAddButton.textContent = activeCandidate.confidence < weakConfidence && activeCandidate.metadata.source !== "quick-add"
+  reviewAddButton.hidden = false;
+  reviewAddButton.disabled = isNoReliableMatch;
+  reviewAddButton.textContent = activeCandidate.confidence < weakConfidence && activeCandidate.metadata.source !== "quick-add" && !isNoReliableMatch
     ? "Use anyway"
     : "Add plant";
+  retryScanButton.hidden = !isNoReliableMatch;
+  manualFromScanButton.hidden = !isNoReliableMatch || !lastScanCropDataUrl;
   renderCandidateOptions(index);
   scanResult.hidden = false;
 }
@@ -409,9 +430,9 @@ function normalizeCandidate(candidate) {
 }
 
 function setIdentifying(isIdentifying) {
-  captureButton.disabled = isIdentifying || !stream || !camera.videoWidth;
+  captureButton.disabled = isIdentifying || (!stream && !isFrozenAfterScan) || (!camera.videoWidth && !isFrozenAfterScan);
   demoScanButton.disabled = isIdentifying;
-  captureButton.textContent = isIdentifying ? "Scanning" : "Scan";
+  captureButton.textContent = isIdentifying ? "Scanning" : isFrozenAfterScan ? "Retake" : "Scan";
   demoScanButton.textContent = isIdentifying ? "Scanning" : "Demo test";
 }
 
@@ -437,10 +458,15 @@ function maybeShowPhotoConsent() {
   photoConsentDialog.hidden = false;
 }
 
-function setPhotoTrainingConsent(isAllowed) {
+async function setPhotoTrainingConsent(isAllowed) {
   photoTrainingConsent = isAllowed ? "yes" : "no";
   localStorage.setItem(photoConsentKey, photoTrainingConsent);
   photoConsentDialog.hidden = true;
+  const zip = photoConsentZipInput.value.trim();
+  if (/^\d{5}$/.test(zip)) {
+    weatherZipInput.value = zip;
+    await loadWeatherForZip(zip);
+  }
 }
 
 function loadPhotoTrainingConsent() {
@@ -538,7 +564,7 @@ function cameraErrorMessage(error) {
 }
 
 function openReview() {
-  if (!activeCandidate) {
+  if (!activeCandidate || isNoReliableCandidate(activeCandidate)) {
     return;
   }
 
@@ -546,11 +572,39 @@ function openReview() {
   prepareReview("scan");
 }
 
+function retryScan() {
+  closeReview();
+  scanResult.hidden = true;
+  detectionBox.hidden = true;
+  retryScanButton.hidden = true;
+  manualFromScanButton.hidden = true;
+  startCamera();
+}
+
+function openManualFromScan() {
+  if (!lastScanCropDataUrl) {
+    return;
+  }
+
+  activeCandidate = quickAddCandidate(profiles[0]);
+  activeCandidate.trainingSample = {
+    cropImageDataUrl: lastScanCropDataUrl,
+    capturedAt: new Date().toISOString(),
+    cropBox: focusBox,
+    fullFrameStored: false,
+    consentForPersonalRecognition: photoTrainingConsent === "yes"
+  };
+  activeCandidates = [activeCandidate];
+  detectionBox.hidden = true;
+  prepareReview("manual-scan");
+}
+
 function freezeFeedForReview() {
   if (!lastScanImageDataUrl) {
     return;
   }
 
+  isFrozenAfterScan = true;
   capturedPreview.src = lastScanImageDataUrl;
   capturedPreview.hidden = false;
   capturedPreview.style.display = "block";
@@ -567,7 +621,8 @@ function freezeFeedForReview() {
   cameraStage.classList.remove("is-live");
   feedStatus.hidden = true;
   feedStatus.style.display = "none";
-  captureButton.disabled = true;
+  captureButton.disabled = false;
+  captureButton.textContent = "Retake";
   startCameraButton.textContent = "Camera feed on";
 }
 
@@ -581,17 +636,19 @@ function openQuickAdd() {
 }
 
 function updateQuickAddSpecies() {
-  if (reviewPanel.dataset.mode !== "quick") {
+  if (reviewPanel.dataset.mode !== "quick" && reviewPanel.dataset.mode !== "manual-scan") {
     return;
   }
 
+  const existingTrainingSample = activeCandidate?.trainingSample || null;
   activeCandidate = quickAddCandidate(profiles[Number(quickSpeciesInput.value)]);
+  activeCandidate.trainingSample = existingTrainingSample;
   fillReviewFields(false);
 }
 
 function prepareReview(mode) {
   reviewPanel.dataset.mode = mode;
-  quickSpeciesField.hidden = mode !== "quick";
+  quickSpeciesField.hidden = mode !== "quick" && mode !== "manual-scan";
   fillReviewFields(true);
   reviewPanel.hidden = false;
   plantNameInput.focus();
@@ -944,6 +1001,10 @@ function confidenceHeading(candidate) {
     return "Demo test";
   }
 
+  if (isNoReliableCandidate(candidate)) {
+    return "No reliable match";
+  }
+
   if (candidate.confidence >= strongConfidence) {
     return "Likely match";
   }
@@ -960,6 +1021,10 @@ function confidenceWarning(candidate) {
     return "Demo test only. Use Scan for real Pl@ntNet identification.";
   }
 
+  if (isNoReliableCandidate(candidate)) {
+    return "That photo did not produce a usable plant ID. Retake with one plant filling the box, or choose the plant manually.";
+  }
+
   if (candidate.confidence < weakConfidence) {
     return "Low confidence. Try a closer, centered shot of leaves or flowers before saving.";
   }
@@ -973,6 +1038,12 @@ function confidenceWarning(candidate) {
 
 function confidencePercent(candidate) {
   return `${Math.round(candidate.confidence * 100)}%`;
+}
+
+function isNoReliableCandidate(candidate) {
+  return candidate.metadata.source !== "local-demo" &&
+    candidate.metadata.source !== "quick-add" &&
+    candidate.confidence < noReliableConfidence;
 }
 
 function demoCandidateFor(payload) {

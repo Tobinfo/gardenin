@@ -32,6 +32,9 @@
 - Consent-first data plan: at first use, ask `Can your photos be used to help make floraos better for you?` Store only the plant-box crop by default for recognition/training flows, not the full camera frame. Full-frame photos should be temporary review artifacts unless the user explicitly saves them.
 - First-use photo consent is implemented in the browser prototype. Saved plant records now keep cropped plant-box images only and scrub any old full-frame image data from local storage.
 - ZIP weather is implemented through `/api/weather?zip=#####` using Open-Meteo. The browser sends a ZIP, not device location.
+- First-use prompt now includes ZIP weather entry so the user can set weather context during the same setup moment as photo consent.
+- After a scan freezes, the Scan button becomes Retake so the user is not stuck after the first scan.
+- Very low-confidence IDs are not usable matches. The app should offer retry and manual entry instead of allowing a 0% provider result to be saved as-is.
 - No-subscription water probe direction: support Wi-Fi gateways such as Ecowitt WH51 with GW1100/GW2000, Bluetooth plant sensors such as Mi Flora/Flower Care for pots, and later ESP32 DIY probes for custom beds.
 - If this chat context closes, reopen `C:\dev\plant watering` and ask Codex to read `PROJECT_CONTEXT.md`, `docs/NEXT_STEPS.md`, and `docs/DECISIONS.md`.
 

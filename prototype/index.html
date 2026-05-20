@@ -47,7 +47,11 @@
               <div class="match-options" id="match-options"></div>
             </div>
           </div>
-          <button class="primary-button" id="review-add" type="button">Add plant</button>
+          <div class="result-actions">
+            <button class="primary-button" id="review-add" type="button">Add plant</button>
+            <button class="ghost-button" id="retry-scan" type="button" hidden>Try again</button>
+            <button class="ghost-button" id="manual-from-scan" type="button" hidden>I know this plant</button>
+          </div>
         </div>
       </section>
 
@@ -127,6 +131,10 @@
         <p class="eyebrow">Photo use</p>
         <h2 id="photo-consent-title">Can your photos be used to help make floraos better for you?</h2>
         <p>floraos stores plant-box crops by default, not the full camera frame.</p>
+        <label>
+          ZIP for weather
+          <input id="photo-consent-zip" type="text" inputmode="numeric" autocomplete="postal-code" maxlength="5" placeholder="Optional">
+        </label>
         <div class="scan-actions">
           <button class="primary-button" id="photo-consent-yes" type="button">Yes</button>
           <button class="ghost-button" id="photo-consent-no" type="button">Not now</button>
