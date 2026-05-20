@@ -6,7 +6,7 @@
 2. Keep real plant identification wired through the server-side Pl@ntNet connector and remove confusing demo behavior from the primary Scan path.
 3. Improve plant boxing for identified plants so the UI clearly shows what was recognized in the image.
 4. Make care recommendations more complete by factoring in weather, recent pruning, watering, fertilizing, inspections, and plant-specific history.
-5. Keep quick-add plant fast for plants the user already knows and does not need to scan.
+5. Keep Android/iOS portability in mind for camera, permissions, crop storage, ID-only, and future hosted sync.
 
 ## Recently Understood
 
@@ -53,6 +53,7 @@
 - ID-only mode is for plants outside the user's garden. It captures three plant-box photos, scores them locally, sends only the best crop to Pl@ntNet, and does not add a plant card or care tracking.
 - ID-only best-photo scoring uses sharpness, usable brightness, contrast, and plant-like color/texture inside the crop.
 - ID-only results can optionally save the best crop to a personal ID gallery. Optional ZIP/place note fields are manual only, and the user can also request one-time browser device location. No reverse geocoding or location lookup API is used.
+- Android/iOS planning is now tracked in `docs/MOBILE_PLAN.md`. Browser features should preserve a clean mobile path rather than depending on desktop-only assumptions.
 - Product/pricing ideas are tracked in `docs/IDEAS.md`.
 - No-subscription water probe direction: support Wi-Fi gateways such as Ecowitt WH51 with GW1100/GW2000, Bluetooth plant sensors such as Mi Flora/Flower Care for pots, and later ESP32 DIY probes for custom beds.
 - If this chat context closes, reopen `C:\dev\plant watering` and ask Codex to read `PROJECT_CONTEXT.md`, `docs/NEXT_STEPS.md`, and `docs/DECISIONS.md`.
@@ -66,6 +67,7 @@
 - What is the fastest quick-add flow: type plant name first, choose from known samples, or add unknown plant and identify later?
 - What database should hold hosted plant records, scan photos, corrections, weather context, and care history?
 - Which first water probe path should be implemented: Ecowitt Wi-Fi gateway, Bluetooth Mi Flora import, or manual/ESP32 endpoint?
+- Should the first native proof be ID-only first, then garden tracking later, or should it include garden save from day one?
 
 ## Suggested Next Work
 
@@ -84,3 +86,4 @@
 13. Add hosted persistence for plant records, crop photos, care logs, weather snapshots, and recognition events.
 14. Use Perenual plant details to enrich saved plant care profiles after ID/manual confirmation.
 15. Add a full user-visible data settings screen for consent, export, and account deletion.
+16. Start the first native mobile proof once the server API and hosted storage boundary are stable enough.

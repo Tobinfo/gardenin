@@ -141,3 +141,11 @@ Reason: This gives the user a useful reference without pretending the plant is p
 Decision: Favor no-subscription water probe options first: Wi-Fi gateway probes, Bluetooth plant sensors, and later a simple custom endpoint for ESP32-style DIY probes.
 
 Reason: The user wants water-need inputs without committing to subscription hardware or cloud-only vendors.
+
+## 2026-05-20: Android And iOS Portability
+
+Decision: Keep the browser prototype as the fastest product-learning surface, but make every new workflow portable to Android and iOS.
+
+Reason: The product will need mobile camera capture, permission handling, offline/local cache, hosted sync, and native reminders. Browser work should not create product behavior that cannot translate cleanly to mobile.
+
+Implementation note: `docs/MOBILE_PLAN.md` is the mobile planning source. The first native milestone should likely be ID-only identification with three-photo capture, best-photo selection, provider ID through the server, and optional save to personal ID gallery.
