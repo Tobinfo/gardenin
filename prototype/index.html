@@ -338,8 +338,23 @@
 
         <div class="data-setting-row">
           <div>
+            <strong>Pl@ntNet API key</strong>
+            <p id="plantnet-key-status">Checking key setting.</p>
+            <label>
+              Personal API key
+              <input id="plantnet-api-key" type="password" autocomplete="off" placeholder="Paste Pl@ntNet key">
+            </label>
+          </div>
+          <div class="photo-actions">
+            <button type="button" id="plantnet-key-save">Save key</button>
+            <button type="button" id="plantnet-key-clear">Clear key</button>
+          </div>
+        </div>
+
+        <div class="data-setting-row">
+          <div>
             <strong>Export or delete</strong>
-            <p>Exports include local plant records, crop photos, ID-only gallery items, ZIP weather setting, and consent setting.</p>
+            <p>Exports include local plant records, crop photos, recognition events, ID-only gallery items, ZIP weather setting, and consent setting. API keys are not exported.</p>
           </div>
           <div class="photo-actions">
             <button type="button" id="data-export">Export</button>

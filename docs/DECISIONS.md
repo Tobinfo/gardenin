@@ -175,3 +175,19 @@ Decision: Browser persistence should go through a repository module instead of d
 Reason: The app needs a clear place to swap browser-local storage for hosted database/object storage later without rewriting scan, recognition, gallery, and care UI code.
 
 Implementation note: `prototype/storage-repository.js` owns browser-local keys, legacy key migration, export payload shape, and delete-all-local-data behavior. The Data panel exposes photo-recognition consent, export, and local delete controls.
+
+## 2026-05-20: Free/dev user-owned Pl@ntNet keys
+
+Decision: Free or development deployments may require each user to provide their own Pl@ntNet API key.
+
+Reason: This prevents one shared hosted key from absorbing all free usage. It is viable for early testers and self-directed users, but it is too much friction for a polished consumer onboarding path.
+
+Implementation note: `REQUIRE_USER_PLANTNET_API_KEY=true` makes the server reject real plant ID requests without a user-owned key. The browser Data panel can save a personal key locally and sends it only with `/api/identify`; exports include only whether a local key exists, not the key itself. Native mobile clients should use platform secure storage if this mode remains available.
+
+## 2026-05-20: Recognition event history
+
+Decision: Recognition attempts and outcomes should be first-class records, not only implied by plant records or care logs.
+
+Reason: Accepted, rejected, provider-fallback, and error outcomes are needed for debugging, trust, future model training, and hosted sync.
+
+Implementation note: The browser now keeps a capped local `recognitionEvents` list in `prototype/storage-repository.js` and includes it in local export/delete flows. Hosted persistence should move this into the planned `recognition_events` table.

@@ -99,6 +99,10 @@ const dataSettingsCloseButton = document.querySelector("#data-settings-close");
 const photoUseStatus = document.querySelector("#photo-use-status");
 const photoUseAllowButton = document.querySelector("#photo-use-allow");
 const photoUseDisableButton = document.querySelector("#photo-use-disable");
+const plantNetKeyStatus = document.querySelector("#plantnet-key-status");
+const plantNetApiKeyInput = document.querySelector("#plantnet-api-key");
+const plantNetKeySaveButton = document.querySelector("#plantnet-key-save");
+const plantNetKeyClearButton = document.querySelector("#plantnet-key-clear");
 const dataExportButton = document.querySelector("#data-export");
 const dataDeleteButton = document.querySelector("#data-delete");
 
@@ -127,6 +131,7 @@ let activeIdOnlyLocation = { zip: "", placeNote: "" };
 const photoFeatureCache = new Map();
 const focusBox = { x: 0.18, y: 0.12, width: 0.64, height: 0.72 };
 let idOnlyGallery = loadIdOnlyGallery();
+let recognitionEvents = loadRecognitionEvents();
 const strongConfidence = 0.55;
 const weakConfidence = 0.25;
 const noReliableConfidence = 0.05;
@@ -246,6 +251,8 @@ photoLibraryCloseButton.addEventListener("click", closePhotoLibrary);
 dataSettingsCloseButton.addEventListener("click", closeDataSettings);
 photoUseAllowButton.addEventListener("click", () => updatePhotoTrainingConsentFromSettings(true));
 photoUseDisableButton.addEventListener("click", () => updatePhotoTrainingConsentFromSettings(false));
+plantNetKeySaveButton.addEventListener("click", savePlantNetApiKeySetting);
+plantNetKeyClearButton.addEventListener("click", clearPlantNetApiKeySetting);
 dataExportButton.addEventListener("click", exportLocalData);
 dataDeleteButton.addEventListener("click", deleteLocalData);
 photoLibraryDialog.addEventListener("click", (event) => {
@@ -493,12 +500,13 @@ async function identifyFromImage(payload, options = {}) {
     renderRecognitionDebug(options.idOnly
       ? "ID only: sending the best of 3 photos to Pl@ntNet. This will not add garden tracking."
       : "Using Pl@ntNet because no confident local photo match was found.");
+    const providerPayload = providerIdentifyPayload(payload, options);
     const response = await fetch("/api/identify", {
       method: "POST",
       headers: {
         "content-type": "application/json"
       },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(providerPayload)
     });
 
     const result = await response.json();
@@ -506,6 +514,8 @@ async function identifyFromImage(payload, options = {}) {
     if (!response.ok || !result.candidates?.length) {
       throw new Error(result.error || "No plant match found.");
     }
+
+    logProviderRecognitionEvent(result, payload, options);
 
     if (options.idOnly) {
       showIdOnlyCandidates(result.candidates, payload);
@@ -533,10 +543,59 @@ async function identifyFromImage(payload, options = {}) {
       retryScanButton.hidden = false;
       manualFromScanButton.hidden = Boolean(options.idOnly) || !lastScanCropDataUrl;
       morePhotosFromScanButton.hidden = Boolean(options.idOnly) || !lastScanCropDataUrl || plants.length === 0;
+      logRecognitionEvent({
+        mode: recognitionModeForOptions(options),
+        usedProvider: "provider",
+        providerSource: "error",
+        outcome: "error",
+        matchAccepted: false,
+        error: error.message,
+        queryPhotoCount: scanPhotosFromPayload(payload).length
+      });
     }
   } finally {
     setIdentifying(false);
   }
+}
+
+function providerIdentifyPayload(payload, options = {}) {
+  const body = {
+    imageDataUrl: payload?.imageDataUrl,
+    imageSignature: payload?.imageSignature,
+    demoIndex: payload?.demoIndex,
+    focusBox: payload?.focusBox || focusBox,
+    quality: payload?.quality || null,
+    mode: recognitionModeForOptions(options)
+  };
+  const plantNetApiKey = repository.loadPlantNetApiKey().trim();
+  if (plantNetApiKey) {
+    body.plantNetApiKey = plantNetApiKey;
+  }
+  return body;
+}
+
+function recognitionModeForOptions(options = {}) {
+  return options.idOnly ? "id-only" : "garden-scan";
+}
+
+function logProviderRecognitionEvent(result, payload, options = {}) {
+  const candidate = result.candidates?.[0];
+  if (!candidate) {
+    return;
+  }
+
+  logRecognitionEvent({
+    mode: recognitionModeForOptions(options),
+    usedProvider: result.provider?.name || candidate.metadata?.providerName || "provider",
+    providerSource: result.provider?.source || candidate.metadata?.source || "provider",
+    outcome: "provider-result",
+    matchAccepted: null,
+    candidateCommonName: candidate.profile?.commonName || null,
+    candidatePlantId: null,
+    confidence: Number.isFinite(candidate.confidence) ? candidate.confidence : null,
+    photoId: null,
+    queryPhotoCount: scanPhotosFromPayload(payload).length
+  });
 }
 
 function showCandidates(candidates, payload) {
@@ -883,6 +942,20 @@ function confirmKnownPlantObservation() {
     }
   });
 
+  logRecognitionEvent({
+    mode: "garden-scan",
+    usedProvider: activeCandidate?.metadata?.providerName || "gardenin photos",
+    providerSource: activeCandidate?.metadata?.source || "local-repository",
+    outcome: "accepted",
+    matchAccepted: true,
+    candidateCommonName: plant.species.commonName,
+    candidatePlantId: plant.id,
+    confidence: activeCandidate?.confidence || null,
+    photoId: plant.careLogs[0].observation?.id || null,
+    queryPhotoCount: sightingPhotos.length,
+    queryPhotoNumber: activeCandidate?.metadata?.queryPhotoNumber || null
+  });
+
   if (plant.photoUse?.personalRecognition === true && extraPhotos.length > 0) {
     plant.trainingPhotos = [
       ...(plant.trainingPhotos || []),
@@ -915,6 +988,19 @@ function rejectKnownPlantObservation() {
   pendingKnownPlantPayload = null;
   if (activeCandidate?.metadata?.source === "local-repository" && pendingProviderFallbackPayload) {
     const payload = pendingProviderFallbackPayload;
+    logRecognitionEvent({
+      mode: "garden-scan",
+      usedProvider: activeCandidate.metadata.providerName,
+      providerSource: activeCandidate.metadata.source,
+      outcome: "rejected",
+      matchAccepted: false,
+      candidateCommonName: activeCandidate.profile?.commonName || null,
+      candidatePlantId: activeCandidate.metadata.providerPlantID || null,
+      confidence: activeCandidate.confidence,
+      photoId: null,
+      queryPhotoCount: scanPhotosFromPayload(payload).length,
+      queryPhotoNumber: activeCandidate.metadata.queryPhotoNumber || null
+    });
     pendingProviderFallbackPayload = null;
     activeCandidate = null;
     activeCandidates = [];
@@ -949,10 +1035,26 @@ async function renderProviderStatus() {
   try {
     const response = await fetch("/api/status", { cache: "no-store" });
     const status = await response.json();
-    const provider = status.plantIdProvider === "plantnet" ? "Pl@ntNet" : status.plantIdProvider;
-    providerStatus.textContent = `ID: ${provider}`;
-    providerStatus.classList.toggle("provider-live", status.plantIdProvider === "plantnet" && status.hasPlantNetKey);
-    providerStatus.classList.toggle("provider-demo", status.plantIdProvider !== "plantnet" || !status.hasPlantNetKey);
+    const providerSource = String(status.plantIdProvider || "demo").toLowerCase();
+    const isPlantNet = providerSource === "plantnet" || providerSource === "pl@ntnet";
+    const provider = isPlantNet ? "Pl@ntNet" : status.plantIdProvider;
+    const hasLocalKey = Boolean(repository.loadPlantNetApiKey().trim());
+    if (!isPlantNet) {
+      providerStatus.textContent = `ID: ${provider}`;
+      providerStatus.classList.toggle("provider-live", false);
+      providerStatus.classList.toggle("provider-demo", true);
+      return;
+    }
+
+    const canIdentify = isPlantNet && (status.requiresUserPlantNetKey
+      ? hasLocalKey
+      : status.hasPlantNetKey || hasLocalKey);
+    const keyLabel = status.requiresUserPlantNetKey
+      ? hasLocalKey ? "your key" : "needs your key"
+      : status.hasPlantNetKey ? "server key" : hasLocalKey ? "your key" : "missing key";
+    providerStatus.textContent = `ID: ${provider}, ${keyLabel}`;
+    providerStatus.classList.toggle("provider-live", canIdentify);
+    providerStatus.classList.toggle("provider-demo", !canIdentify);
   } catch {
     providerStatus.textContent = "ID: unknown";
     providerStatus.classList.add("provider-demo");
@@ -1246,6 +1348,20 @@ function closeIdOnlyCapture() {
 }
 
 function confirmIdOnlyResult() {
+  if (activeCandidate) {
+    logRecognitionEvent({
+      mode: "id-only",
+      usedProvider: activeCandidate.metadata?.providerName || "provider",
+      providerSource: activeCandidate.metadata?.source || "provider",
+      outcome: "accepted",
+      matchAccepted: true,
+      candidateCommonName: activeCandidate.profile?.commonName || null,
+      candidatePlantId: null,
+      confidence: activeCandidate.confidence,
+      photoId: null,
+      queryPhotoCount: 1
+    });
+  }
   renderRecognitionDebug(`ID only confirmed: ${activeCandidate.profile.commonName}. It was not added to the garden and no care tracking was created.`);
   setScanMode("garden");
   scanResult.hidden = true;
@@ -1956,6 +2072,18 @@ function savePlant() {
   };
 
   plants.unshift(plant);
+  logRecognitionEvent({
+    mode: reviewPanel.dataset.mode === "quick" || reviewPanel.dataset.mode === "manual-scan" ? "manual-entry" : "garden-scan",
+    usedProvider: activeCandidate.metadata.providerName,
+    providerSource: activeCandidate.metadata.source,
+    outcome: "accepted",
+    matchAccepted: true,
+    candidateCommonName: activeCandidate.profile.commonName,
+    candidatePlantId: plant.id,
+    confidence: activeCandidate.confidence,
+    photoId: activeCandidate.trainingSample?.id || null,
+    queryPhotoCount: 1
+  });
   savePlants();
   renderPlants();
   closeReview();
@@ -2093,14 +2221,41 @@ function closeDataSettings() {
 function renderDataSettings() {
   const photoCount = plants.reduce((count, plant) => count + photosForPlant(plant).length, 0);
   const galleryCount = idOnlyGallery.length;
+  const recognitionEventCount = recognitionEvents.length;
+  const hasPlantNetApiKey = Boolean(repository.loadPlantNetApiKey().trim());
   const consentText = photoTrainingConsent === "yes"
     ? "Allowed for personal recognition. New confirmed plant crops can improve recognition for you."
     : photoTrainingConsent === "no"
       ? "Off for recognition. Existing saved photos remain visible until deleted."
       : "Not set yet.";
-  photoUseStatus.textContent = `${consentText} Local records: ${plants.length} plant(s), ${photoCount} plant photo(s), ${galleryCount} ID-only photo(s).`;
+  photoUseStatus.textContent = `${consentText} Local records: ${plants.length} plant(s), ${photoCount} plant photo(s), ${galleryCount} ID-only photo(s), ${recognitionEventCount} recognition event(s).`;
   photoUseAllowButton.disabled = photoTrainingConsent === "yes";
   photoUseDisableButton.disabled = photoTrainingConsent === "no";
+  plantNetKeyStatus.textContent = hasPlantNetApiKey
+    ? "A personal Pl@ntNet key is saved in this browser. It is sent only during plant ID requests and is not exported."
+    : "No personal key is saved. Free/dev mode can require each user to bring their own Pl@ntNet key.";
+  plantNetApiKeyInput.value = "";
+  plantNetKeyClearButton.disabled = !hasPlantNetApiKey;
+}
+
+function savePlantNetApiKeySetting() {
+  const key = plantNetApiKeyInput.value.trim();
+  if (!/^[A-Za-z0-9._:-]{8,180}$/.test(key)) {
+    plantNetKeyStatus.textContent = "Paste a valid Pl@ntNet API key, then save.";
+    return;
+  }
+
+  repository.savePlantNetApiKey(key);
+  plantNetApiKeyInput.value = "";
+  renderDataSettings();
+  renderProviderStatus();
+}
+
+function clearPlantNetApiKeySetting() {
+  repository.clearPlantNetApiKey();
+  plantNetApiKeyInput.value = "";
+  renderDataSettings();
+  renderProviderStatus();
 }
 
 function updatePhotoTrainingConsentFromSettings(isAllowed) {
@@ -2122,7 +2277,9 @@ function exportLocalData() {
   const payload = repository.exportLocalData({
     plants,
     idOnlyGallery,
+    recognitionEvents,
     photoTrainingConsent,
+    hasLocalPlantNetApiKey: Boolean(repository.loadPlantNetApiKey().trim()),
     weatherZip: weatherZipInput.value.trim() || repository.loadWeatherZip()
   });
   const blob = new Blob([JSON.stringify(payload, null, 2)], {
@@ -2147,6 +2304,7 @@ function deleteLocalData() {
   repository.clearAllLocalData();
   plants = [];
   idOnlyGallery = [];
+  recognitionEvents = [];
   photoTrainingConsent = null;
   forecast = buildDemoForecast();
   weatherSnapshot = {
@@ -2168,6 +2326,7 @@ function deleteLocalData() {
   renderPlants();
   renderDataSettings();
   maybeShowPhotoConsent();
+  renderProviderStatus();
 }
 
 function photosForPlant(plant) {
@@ -2742,6 +2901,46 @@ function loadIdOnlyGallery() {
 function saveIdOnlyGallery() {
   idOnlyGallery = idOnlyGallery.map(sanitizeIdOnlyGalleryPhoto);
   repository.saveIdOnlyGallery(idOnlyGallery);
+}
+
+function loadRecognitionEvents() {
+  return repository.loadRecognitionEvents().map(sanitizeRecognitionEvent);
+}
+
+function saveRecognitionEvents() {
+  recognitionEvents = recognitionEvents.map(sanitizeRecognitionEvent).slice(0, 250);
+  repository.saveRecognitionEvents(recognitionEvents);
+}
+
+function logRecognitionEvent(event) {
+  recognitionEvents.unshift(sanitizeRecognitionEvent({
+    id: makeId("recognition"),
+    createdAt: new Date().toISOString(),
+    ...event
+  }));
+  saveRecognitionEvents();
+  if (!dataSettingsDialog.hidden) {
+    renderDataSettings();
+  }
+}
+
+function sanitizeRecognitionEvent(event) {
+  return {
+    id: event.id || makeId("recognition"),
+    mode: event.mode || "garden-scan",
+    usedProvider: event.usedProvider || null,
+    providerSource: event.providerSource || null,
+    outcome: event.outcome || null,
+    matchAccepted: typeof event.matchAccepted === "boolean" ? event.matchAccepted : null,
+    candidateCommonName: event.candidateCommonName || null,
+    candidatePlantId: event.candidatePlantId || null,
+    confidence: Number.isFinite(event.confidence) ? event.confidence : null,
+    photoId: event.photoId || null,
+    queryPhotoCount: Number.isFinite(event.queryPhotoCount) ? event.queryPhotoCount : null,
+    queryPhotoNumber: Number.isFinite(event.queryPhotoNumber) ? event.queryPhotoNumber : null,
+    error: event.error || null,
+    createdAt: event.createdAt || new Date().toISOString()
+  };
 }
 
 function sanitizeIdOnlyGalleryPhoto(photo) {

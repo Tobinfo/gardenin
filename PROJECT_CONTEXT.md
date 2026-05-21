@@ -29,6 +29,7 @@ The repo contains:
 - `C:\dev\plant watering` is the project source of truth.
 - Ignore OneDrive for this project.
 - Real plant identification should run through Pl@ntNet when `PLANT_ID_PROVIDER=plantnet` and `PLANTNET_API_KEY` are available.
+- Free/dev deployments can instead set `REQUIRE_USER_PLANTNET_API_KEY=true` and ask each user to save a personal Pl@ntNet key in the browser Data panel.
 - Demo identification exists only as a test/fallback path and must not be confused with production scan behavior.
 - Weather is available through `/api/weather?zip=#####` using Open-Meteo.
 - Plant data is currently stored in browser local storage. A real hosted database is needed before the app can reliably collect long-term user photos, corrections, weather context, and care habits.

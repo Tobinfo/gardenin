@@ -60,11 +60,11 @@ const demoBoxes = [
   { x: 0.32, y: 0.2, width: 0.36, height: 0.52 }
 ];
 
-async function identifyPlant({ imageDataUrl, imageSignature, demoIndex, focusBox }) {
+async function identifyPlant({ imageDataUrl, imageSignature, demoIndex, focusBox }, options = {}) {
   const provider = (process.env.PLANT_ID_PROVIDER || "demo").toLowerCase();
 
   if (provider === "plantnet" || provider === "pl@ntnet") {
-    return identifyWithPlantNet({ imageDataUrl, focusBox });
+    return identifyWithPlantNet({ imageDataUrl, focusBox }, options);
   }
 
   if (provider !== "demo") {
@@ -76,13 +76,17 @@ async function identifyPlant({ imageDataUrl, imageSignature, demoIndex, focusBox
   return identifyWithDemoProvider({ imageDataUrl, imageSignature, demoIndex, focusBox });
 }
 
-async function identifyWithPlantNet({ imageDataUrl, focusBox }) {
-  const apiKey = process.env.PLANTNET_API_KEY;
+async function identifyWithPlantNet({ imageDataUrl, focusBox }, options = {}) {
+  const apiKey = options.requireUserPlantNetApiKey
+    ? options.plantNetApiKey
+    : options.plantNetApiKey || process.env.PLANTNET_API_KEY;
   const project = process.env.PLANTNET_PROJECT || "all";
+  const providerName = options.plantNetApiKey ? "Pl@ntNet (your key)" : "Pl@ntNet";
+  const providerSource = options.plantNetApiKey ? "plantnet-user-key" : "plantnet";
 
   if (!apiKey) {
-    throw Object.assign(new Error("PLANTNET_API_KEY is required for real plant ID."), {
-      statusCode: 500
+    throw Object.assign(new Error("Add a Pl@ntNet API key in Data settings before using real plant ID."), {
+      statusCode: options.requireUserPlantNetApiKey ? 401 : 500
     });
   }
 
@@ -116,7 +120,10 @@ async function identifyWithPlantNet({ imageDataUrl, focusBox }) {
 
   const candidates = (result.results || [])
     .slice(0, 5)
-    .map((suggestion) => plantNetCandidate(suggestion, focusBox))
+    .map((suggestion) => plantNetCandidate(suggestion, focusBox, {
+      providerName,
+      providerSource
+    }))
     .filter(Boolean);
 
   if (candidates.length === 0) {
@@ -127,8 +134,8 @@ async function identifyWithPlantNet({ imageDataUrl, focusBox }) {
 
   return {
     provider: {
-      name: "Pl@ntNet",
-      source: "plantnet"
+      name: providerName,
+      source: providerSource
     },
     candidates
   };
@@ -170,11 +177,13 @@ function buildCandidate(profile, index, confidence, issues = issueWatchlistFor(p
   };
 }
 
-function plantNetCandidate(suggestion, focusBox) {
+function plantNetCandidate(suggestion, focusBox, provider = {}) {
   const species = suggestion.species || {};
   const commonNames = species.commonNames || [];
   const scientificName = species.scientificNameWithoutAuthor || species.scientificName;
   const commonName = commonNames[0] || scientificName || "Unknown plant";
+  const providerName = provider.providerName || "Pl@ntNet";
+  const providerSource = provider.providerSource || "plantnet";
 
   if (!commonName) {
     return null;
@@ -197,9 +206,9 @@ function plantNetCandidate(suggestion, focusBox) {
     confidence: Number(suggestion.score || 0),
     observationBox: focusBox || null,
     metadata: {
-      providerName: "Pl@ntNet",
+      providerName,
       providerPlantID: scientificName || commonName,
-      source: "plantnet"
+      source: providerSource
     },
     issues: []
   };

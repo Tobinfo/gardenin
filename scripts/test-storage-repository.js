@@ -35,8 +35,12 @@ assert.equal(storage.getItem("floraos.weather.zip"), null);
 
 repository.savePlants([{ id: "plant-1" }]);
 repository.saveIdOnlyGallery([{ id: "id-only-1" }]);
+repository.saveRecognitionEvents([{ id: "recognition-1" }]);
+repository.savePlantNetApiKey("test-key-123");
 assert.deepEqual(repository.loadPlants(), [{ id: "plant-1" }]);
 assert.deepEqual(repository.loadIdOnlyGallery(), [{ id: "id-only-1" }]);
+assert.deepEqual(repository.loadRecognitionEvents(), [{ id: "recognition-1" }]);
+assert.equal(repository.loadPlantNetApiKey(), "test-key-123");
 
 const exported = repository.exportLocalData();
 assert.equal(exported.schemaVersion, 1);
@@ -44,11 +48,16 @@ assert.equal(exported.photoTrainingConsent, "yes");
 assert.equal(exported.weatherZip, "55025");
 assert.equal(exported.plants.length, 1);
 assert.equal(exported.idOnlyGallery.length, 1);
+assert.equal(exported.recognitionEvents.length, 1);
+assert.equal(exported.hasLocalPlantNetApiKey, true);
+assert.equal(exported.plantNetApiKey, undefined);
 
 repository.clearAllLocalData();
 assert.deepEqual(repository.loadPlants(), []);
 assert.deepEqual(repository.loadIdOnlyGallery(), []);
+assert.deepEqual(repository.loadRecognitionEvents(), []);
 assert.equal(repository.loadPhotoTrainingConsent(), null);
+assert.equal(repository.loadPlantNetApiKey(), "");
 assert.equal(repository.loadWeatherZip(), null);
 
 console.log("Storage repository tests passed.");

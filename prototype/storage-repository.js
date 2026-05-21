@@ -8,8 +8,10 @@
   const keys = {
     plants: "gardensnap.prototype.plants",
     idOnlyGallery: "gardenin.prototype.idOnlyGallery",
+    recognitionEvents: "gardenin.prototype.recognitionEvents",
     photoConsent: "gardenin.photoTrainingConsent",
     legacyPhotoConsent: "floraos.photoTrainingConsent",
+    plantNetApiKey: "gardenin.plantNetApiKey",
     weatherZip: "gardenin.weather.zip",
     legacyWeatherZip: "floraos.weather.zip"
   };
@@ -21,8 +23,18 @@
       savePlants: (plants) => writeJson(storage, keys.plants, plants),
       loadIdOnlyGallery: () => readJson(storage, keys.idOnlyGallery, []),
       saveIdOnlyGallery: (photos) => writeJson(storage, keys.idOnlyGallery, photos),
+      loadRecognitionEvents: () => readJson(storage, keys.recognitionEvents, []),
+      saveRecognitionEvents: (events) => writeJson(storage, keys.recognitionEvents, events),
       loadPhotoTrainingConsent: () => migrateEnumValue(storage, keys.photoConsent, keys.legacyPhotoConsent, ["yes", "no"]),
       savePhotoTrainingConsent: (value) => storage.setItem(keys.photoConsent, value === "yes" ? "yes" : "no"),
+      loadPlantNetApiKey: () => storage.getItem(keys.plantNetApiKey) || "",
+      savePlantNetApiKey: (value) => {
+        const trimmed = String(value || "").trim();
+        if (trimmed) {
+          storage.setItem(keys.plantNetApiKey, trimmed);
+        }
+      },
+      clearPlantNetApiKey: () => storage.removeItem(keys.plantNetApiKey),
       loadWeatherZip: () => migrateZip(storage),
       saveWeatherZip: (zip) => {
         if (/^\d{5}$/.test(String(zip || ""))) {
@@ -35,7 +47,9 @@
         storage: "browser-local",
         plants: snapshot.plants ?? readJson(storage, keys.plants, []),
         idOnlyGallery: snapshot.idOnlyGallery ?? readJson(storage, keys.idOnlyGallery, []),
+        recognitionEvents: snapshot.recognitionEvents ?? readJson(storage, keys.recognitionEvents, []),
         photoTrainingConsent: snapshot.photoTrainingConsent ?? migrateEnumValue(storage, keys.photoConsent, keys.legacyPhotoConsent, ["yes", "no"]),
+        hasLocalPlantNetApiKey: snapshot.hasLocalPlantNetApiKey ?? Boolean(storage.getItem(keys.plantNetApiKey)),
         weatherZip: snapshot.weatherZip ?? migrateZip(storage)
       }),
       clearAllLocalData: () => {

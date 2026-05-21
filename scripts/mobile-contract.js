@@ -1,8 +1,9 @@
 const mobileApiContract = {
-  version: "2026-05-20.1",
+  version: "2026-05-20.2",
   product: "gardenin",
   principles: [
-    "Mobile clients never store external provider API keys.",
+    "Mobile clients do not store shared provider API keys.",
+    "Free/dev clients may store user-owned provider keys only in secure storage.",
     "Durable photo storage is crop-only by default.",
     "Garden tracking and ID-only identification are separate modes.",
     "One-time location is explicit and does not require reverse geocoding.",
@@ -93,7 +94,8 @@ const mobileApiContract = {
     cropOnlyStorage: true,
     fullFrameStoredByDefault: false,
     reverseGeocodingRequired: false,
-    providerKeysOnClient: false
+    sharedProviderKeysOnClient: false,
+    userOwnedProviderKeysAllowed: true
   }
 };
 

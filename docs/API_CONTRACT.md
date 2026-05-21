@@ -1,10 +1,10 @@
 # API Contract
 
-This contract is the shared target for web, Android, and iOS. Mobile clients should call gardenin server endpoints and should never hold provider API keys.
+This contract is the shared target for web, Android, and iOS. Mobile clients should call gardenin server endpoints and should never hold shared provider API keys. Free/dev builds may store user-owned provider keys only in local secure storage.
 
 ## Version
 
-Current contract version: `2026-05-20.1`
+Current contract version: `2026-05-20.2`
 
 ## Principles
 
@@ -86,7 +86,11 @@ Response:
   "plantIdProvider": "plantnet",
   "hasPlantNetKey": true,
   "hasPerenualKey": false,
-  "contractVersion": "2026-05-20.1"
+  "acceptsUserPlantNetKey": true,
+  "requiresUserPlantNetKey": false,
+  "identifyRateLimitPerMinute": 24,
+  "identifyUserKeyRateLimitPerMinute": 60,
+  "contractVersion": "2026-05-20.2"
 }
 ```
 
@@ -98,7 +102,7 @@ Response:
 
 ```json
 {
-  "version": "2026-05-20.1",
+  "version": "2026-05-20.2",
   "endpoints": [
     "GET /api/status",
     "GET /api/mobile-contract",
@@ -136,11 +140,14 @@ Request:
     "plantColorScore": 0.74,
     "reason": "sharp 91%, light 78%, contrast 66%, color 74%"
   },
-  "mode": "garden-scan"
+  "mode": "garden-scan",
+  "plantNetApiKey": "optional-user-owned-key"
 }
 ```
 
 `mode` can be `garden-scan`, `training`, or `id-only`.
+
+`plantNetApiKey` is optional and only for free/dev deployments where the user brings their own Pl@ntNet key. It must not be stored server-side or included in exports. Native clients should store a user-owned key only in platform secure storage if this mode is used.
 
 Response:
 
@@ -234,7 +241,9 @@ Until hosted accounts exist, the browser Data panel can export local records in 
   "storage": "browser-local",
   "plants": [],
   "idOnlyGallery": [],
+  "recognitionEvents": [],
   "photoTrainingConsent": "yes",
+  "hasLocalPlantNetApiKey": false,
   "weatherZip": "55025"
 }
 ```

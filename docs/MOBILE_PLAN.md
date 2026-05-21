@@ -84,6 +84,11 @@ Do not let mobile clients hold provider secrets. Mobile apps should call gardeni
 
 The detailed shared data contract is tracked in `docs/API_CONTRACT.md`. The server also exposes a machine-readable summary at `GET /api/mobile-contract` so native clients can verify the contract version they are targeting.
 
+Free/dev exception:
+
+- If `REQUIRE_USER_PLANTNET_API_KEY=true` is used, a user-owned Pl@ntNet key can be stored in Android Keystore or iOS Keychain and sent only to `POST /api/identify`.
+- This should remain a free/dev path, not the default consumer onboarding path unless the product intentionally accepts that friction.
+
 ## Mobile Readiness Rules For Browser Work
 
 When adding browser features, keep these constraints in mind:

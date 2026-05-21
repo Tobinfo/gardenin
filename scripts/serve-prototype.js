@@ -1,6 +1,7 @@
 const http = require("node:http");
 const fs = require("node:fs/promises");
 const path = require("node:path");
+const crypto = require("node:crypto");
 
 loadLocalEnv();
 
@@ -11,6 +12,11 @@ const { hasPerenualKey, searchPerenualPlant } = require("./perenual-provider");
 const root = path.resolve(__dirname, "..", "prototype");
 const port = Number(process.env.PORT || 5173);
 const host = process.env.HOST || "0.0.0.0";
+const identifyRateWindowMs = Number(process.env.IDENTIFY_RATE_WINDOW_MS || 60_000);
+const identifyRateLimit = Number(process.env.IDENTIFY_RATE_LIMIT || 24);
+const identifyUserKeyRateLimit = Number(process.env.IDENTIFY_USER_KEY_RATE_LIMIT || 60);
+const requireUserPlantNetApiKey = process.env.REQUIRE_USER_PLANTNET_API_KEY === "true";
+const identifyRateBuckets = new Map();
 
 const mimeTypes = new Map([
   [".html", "text/html; charset=utf-8"],
@@ -32,6 +38,10 @@ const server = http.createServer(async (request, response) => {
         plantIdProvider: process.env.PLANT_ID_PROVIDER || "demo",
         hasPlantNetKey: Boolean(process.env.PLANTNET_API_KEY),
         hasPerenualKey: hasPerenualKey(),
+        acceptsUserPlantNetKey: true,
+        requiresUserPlantNetKey: requireUserPlantNetApiKey,
+        identifyRateLimitPerMinute: Math.round(identifyRateLimit * 60_000 / identifyRateWindowMs),
+        identifyUserKeyRateLimitPerMinute: Math.round(identifyUserKeyRateLimit * 60_000 / identifyRateWindowMs),
         contractVersion: mobileApiContract.version
       });
       return;
@@ -55,8 +65,14 @@ const server = http.createServer(async (request, response) => {
     }
 
     if (request.method === "POST" && requestUrl.pathname === "/api/identify") {
-      const body = await readJsonBody(request);
-      const result = await identifyPlant(body);
+      const rawBody = await readJsonBody(request);
+      const userPlantNetApiKey = userPlantNetApiKeyFrom(request, rawBody);
+      checkIdentifyRateLimit(request, Boolean(userPlantNetApiKey));
+      const body = validateIdentifyPayload(rawBody);
+      const result = await identifyPlant(body, {
+        plantNetApiKey: userPlantNetApiKey,
+        requireUserPlantNetApiKey
+      });
       writeJson(response, 200, result);
       return;
     }
@@ -208,9 +224,120 @@ function readJsonBody(request) {
 function writeJson(response, statusCode, body) {
   response.writeHead(statusCode, {
     "content-type": "application/json; charset=utf-8",
-    "cache-control": "no-store"
+    "cache-control": "no-store",
+    "x-content-type-options": "nosniff"
   });
   response.end(JSON.stringify(body));
+}
+
+function userPlantNetApiKeyFrom(request, body) {
+  const value = String(request.headers["x-plantnet-api-key"] || body?.plantNetApiKey || "").trim();
+  if (!value) {
+    return "";
+  }
+
+  if (!/^[A-Za-z0-9._:-]{8,180}$/.test(value)) {
+    throw Object.assign(new Error("Pl@ntNet API key format is invalid."), { statusCode: 400 });
+  }
+
+  return value;
+}
+
+function validateIdentifyPayload(body) {
+  if (!body || typeof body !== "object") {
+    throw Object.assign(new Error("Request body must be an object."), { statusCode: 400 });
+  }
+
+  const imageDataUrl = String(body.imageDataUrl || "");
+  if (!/^data:image\/(?:jpeg|jpg|png|webp);base64,[A-Za-z0-9+/=\s]+$/.test(imageDataUrl)) {
+    throw Object.assign(new Error("A JPEG, PNG, or WebP crop image is required."), { statusCode: 400 });
+  }
+
+  if (imageDataUrl.length > 7_500_000) {
+    throw Object.assign(new Error("Crop image is too large."), { statusCode: 413 });
+  }
+
+  return {
+    imageDataUrl,
+    imageSignature: Number.isFinite(Number(body.imageSignature)) ? Number(body.imageSignature) : undefined,
+    demoIndex: Number.isInteger(body.demoIndex) ? body.demoIndex : undefined,
+    focusBox: validateFocusBox(body.focusBox),
+    mode: validateMode(body.mode)
+  };
+}
+
+function validateFocusBox(box) {
+  if (!box || typeof box !== "object") {
+    return undefined;
+  }
+
+  const x = Number(box.x);
+  const y = Number(box.y);
+  const width = Number(box.width);
+  const height = Number(box.height);
+  const values = [x, y, width, height];
+  const isValid = values.every(Number.isFinite) &&
+    x >= 0 &&
+    y >= 0 &&
+    width > 0 &&
+    height > 0 &&
+    x + width <= 1.01 &&
+    y + height <= 1.01;
+
+  if (!isValid) {
+    throw Object.assign(new Error("focusBox must use normalized crop coordinates."), { statusCode: 400 });
+  }
+
+  return { x, y, width, height };
+}
+
+function validateMode(mode) {
+  const value = String(mode || "garden-scan");
+  return ["garden-scan", "id-only", "training"].includes(value) ? value : "garden-scan";
+}
+
+function checkIdentifyRateLimit(request, hasUserPlantNetApiKey) {
+  const now = Date.now();
+  const client = clientIdentity(request);
+  const limit = hasUserPlantNetApiKey ? identifyUserKeyRateLimit : identifyRateLimit;
+  const bucketKey = `${client}:${hasUserPlantNetApiKey ? "user-key" : "server-key"}`;
+  const bucket = identifyRateBuckets.get(bucketKey) || {
+    count: 0,
+    resetAt: now + identifyRateWindowMs
+  };
+
+  if (bucket.resetAt <= now) {
+    bucket.count = 0;
+    bucket.resetAt = now + identifyRateWindowMs;
+  }
+
+  bucket.count += 1;
+  identifyRateBuckets.set(bucketKey, bucket);
+  pruneIdentifyRateBuckets(now);
+
+  if (bucket.count > limit) {
+    throw Object.assign(new Error("Too many plant ID requests. Wait a minute, then try again."), {
+      statusCode: 429
+    });
+  }
+}
+
+function clientIdentity(request) {
+  const forwarded = String(request.headers["x-forwarded-for"] || "").split(",")[0].trim();
+  const raw = forwarded || request.socket.remoteAddress || "unknown";
+  return crypto.createHash("sha256").update(raw).digest("hex").slice(0, 16);
+}
+
+function pruneIdentifyRateBuckets(now) {
+  if (identifyRateBuckets.size < 500) {
+    return;
+  }
+
+  for (const [key, bucket] of identifyRateBuckets) {
+    if (bucket.resetAt <= now) {
+      identifyRateBuckets.delete(key);
+    }
+  }
 }
 
 function loadLocalEnv() {
